@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: juicer-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: juicer_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - juicer_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  juicer_postgres_data:
