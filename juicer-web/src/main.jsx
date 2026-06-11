@@ -80,6 +80,10 @@ function App() {
     ["ENROUTE", "CHARGING"].includes(job.current_step)
   );
 
+  const firstAssignedJob = queueJobs.find(
+    (job) => job.current_step === "ASSIGNED"
+  );
+
   return (
     <main className="container">
       <header className="header">
@@ -87,8 +91,8 @@ function App() {
           <p className="eyebrow">Juicer Operations</p>
           <h1>Juicer Queue Dashboard</h1>
           <p className="subtitle">
-            First come, first serve queue. Enroute and charging update inside
-            the same queue card.
+            Strict first come, first serve queue. Only the top job can be
+            accepted.
           </p>
         </div>
 
@@ -132,8 +136,8 @@ function App() {
             </div>
 
             <p className="column-description">
-              Live charging queue. New requests go to the end. Only one job can
-              be enroute or charging at a time.
+              New requests join the end. The next job becomes available only
+              after the active job is completed.
             </p>
 
             <div className="column-body">
@@ -146,6 +150,7 @@ function App() {
                     job={job}
                     queuePosition={index + 1}
                     hasActiveJob={hasActiveJob}
+                    firstAssignedJob={firstAssignedJob}
                     actionLoading={actionLoading}
                     updateJob={updateJob}
                   />
@@ -163,13 +168,19 @@ function JobCard({
   job,
   queuePosition,
   hasActiveJob,
+  firstAssignedJob,
   actionLoading,
   updateJob,
 }) {
   const shortJobId = job.job_id.slice(0, 8);
 
+  const isFirstAssigned =
+    firstAssignedJob && firstAssignedJob.job_id === job.job_id;
+
   const acceptDisabled =
-    hasActiveJob || actionLoading === `${job.job_id}-accept`;
+    !isFirstAssigned ||
+    hasActiveJob ||
+    actionLoading === `${job.job_id}-accept`;
 
   return (
     <article className="job-card">
@@ -210,9 +221,13 @@ function JobCard({
               Accept Job
             </button>
 
-            {hasActiveJob && (
+            {!isFirstAssigned && (
+              <p className="hint-text">Waiting for jobs ahead in queue.</p>
+            )}
+
+            {isFirstAssigned && hasActiveJob && (
               <p className="hint-text">
-                Another job is already active. Complete it first.
+                Finish the active job before accepting this one.
               </p>
             )}
           </>
