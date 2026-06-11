@@ -38,6 +38,21 @@ def is_valid_slot_id(value: str) -> bool:
     return bool(SLOT_PATTERN.match(value))
 
 
+def get_queue_position(db: Session, job: Queue):
+    active_jobs = (
+        db.query(Queue)
+        .filter(Queue.current_step.in_(["ASSIGNED", "ENROUTE", "CHARGING"]))
+        .order_by(Queue.created_at.asc())
+        .all()
+    )
+
+    for index, item in enumerate(active_jobs, start=1):
+        if item.job_id == job.job_id:
+            return index, len(active_jobs)
+
+    return None, len(active_jobs)
+
+
 @router.get("")
 async def verify_webhook(request: Request):
     params = request.query_params
@@ -100,12 +115,15 @@ async def receive_webhook(
                 db.commit()
                 db.refresh(job)
 
+                position, total = get_queue_position(db, job)
+
                 send_whatsapp_text(
                     phone,
                     "Payment successful ✅\n\n"
                     f"Job ID: {job.job_id}\n"
-                    f"Status: {job.current_step}\n\n"
-                    "A Juicer operator will be assigned shortly.",
+                    f"Status: {job.current_step}\n"
+                    f"Queue Position: #{position} of {total}\n\n"
+                    "A Juicer operator will serve requests first come, first serve.",
                 )
 
                 return {"ok": True}
@@ -129,14 +147,37 @@ async def receive_webhook(
 
         if not job:
             send_whatsapp_text(phone, "No active charging request found.")
-        else:
-            send_whatsapp_text(
-                phone,
-                f"Status: {job.current_step}\n"
+            return {"ok": True}
+
+        position, total = get_queue_position(db, job)
+
+        if job.current_step == "INITIATED":
+            message_text = (
+                "Your charging request is created ✅\n\n"
+                "Status: Payment Pending\n"
                 f"Slot: {job.slot_id}\n"
-                f"Vehicle: {job.vehicle_number or 'Pending'}",
+                f"Vehicle: {job.vehicle_number or 'Pending'}\n\n"
+                "Please complete payment to join the queue."
             )
 
+        elif job.current_step in ["ASSIGNED", "ENROUTE", "CHARGING"]:
+            message_text = (
+                "Your Juicer request status ⚡\n\n"
+                f"Status: {job.current_step}\n"
+                f"Queue Position: #{position} of {total}\n"
+                f"Slot: {job.slot_id}\n"
+                f"Vehicle: {job.vehicle_number or 'Pending'}"
+            )
+
+        else:
+            message_text = (
+                "Your charging session is completed ✅\n\n"
+                f"Status: {job.current_step}\n"
+                f"Slot: {job.slot_id}\n"
+                f"Vehicle: {job.vehicle_number or 'Pending'}"
+            )
+
+        send_whatsapp_text(phone, message_text)
         return {"ok": True}
 
     if lower_text == "stop":
