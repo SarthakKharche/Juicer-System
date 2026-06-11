@@ -1,3 +1,4 @@
+import re
 from fastapi import APIRouter, Request, Depends, Response
 from sqlalchemy.orm import Session
 from app.config import settings
@@ -8,6 +9,18 @@ from app.services.queue_service import create_or_update_request, get_latest_job_
 
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["WhatsApp"])
 pending_slots: dict[str, str] = {}
+
+VEHICLE_NUMBER_PATTERN = re.compile(
+    r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$"
+)
+
+
+def normalize_vehicle_number(value: str) -> str:
+    return value.upper().replace(" ", "").replace("-", "")
+
+
+def is_valid_vehicle_number(value: str) -> bool:
+    return bool(VEHICLE_NUMBER_PATTERN.match(value))
 
 
 @router.get("")
@@ -133,7 +146,19 @@ async def receive_webhook(
 
     if phone in pending_slots:
         slot_id = pending_slots.pop(phone)
-        vehicle_number = text.upper().replace(" ", "")
+        vehicle_number = normalize_vehicle_number(text)
+
+        if not is_valid_vehicle_number(vehicle_number):
+            pending_slots[phone] = slot_id
+
+            send_whatsapp_text(
+                phone,
+                "Invalid vehicle number format ❌\n\n"
+                "Please send a valid Indian vehicle number.\n"
+                "Example: MH12AB1234"
+            )
+
+            return {"ok": True}
 
         job = create_or_update_request(
             db,
