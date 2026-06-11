@@ -5,29 +5,19 @@ import "./style.css";
 
 const STATUSES = [
   {
-    key: "INITIATED",
-    title: "Payment Pending",
-    description: "Customer created request but has not paid yet.",
-  },
-  {
     key: "ASSIGNED",
-    title: "Assigned",
-    description: "Payment done. First come, first serve queue.",
+    title: "Queue",
+    description: "First come, first serve paid requests.",
   },
   {
     key: "ENROUTE",
     title: "Enroute",
-    description: "Juicer accepted and is going to the slot.",
+    description: "Current accepted job.",
   },
   {
     key: "CHARGING",
     title: "Charging",
     description: "Vehicle is plugged in and charging.",
-  },
-  {
-    key: "COMPLETED",
-    title: "Completed",
-    description: "Recently completed sessions.",
   },
 ];
 
@@ -74,43 +64,43 @@ function App() {
 
   useEffect(() => {
     loadJobs();
+
     const interval = setInterval(loadJobs, 5000);
+
     return () => clearInterval(interval);
   }, []);
 
   const stats = useMemo(() => {
     return {
       total: jobs.length,
-      initiated: jobs.filter((job) => job.current_step === "INITIATED").length,
       assigned: jobs.filter((job) => job.current_step === "ASSIGNED").length,
       enroute: jobs.filter((job) => job.current_step === "ENROUTE").length,
       charging: jobs.filter((job) => job.current_step === "CHARGING").length,
-      completed: jobs.filter((job) => job.current_step === "COMPLETED").length,
     };
   }, [jobs]);
 
   function jobsByStatus(status) {
-    const filtered = jobs.filter((job) => job.current_step === status);
-
-    if (status === "COMPLETED") {
-      return filtered.sort(
-        (a, b) => new Date(b.created_at || b.updated_at) - new Date(a.created_at || a.updated_at)
+    return jobs
+      .filter((job) => job.current_step === status)
+      .sort(
+        (a, b) =>
+          new Date(a.created_at || a.updated_at) -
+          new Date(b.created_at || b.updated_at)
       );
-    }
-
-    return filtered.sort(
-      (a, b) => new Date(a.created_at || a.updated_at) - new Date(b.created_at || b.updated_at)
-    );
   }
+
+  const hasActiveJob = jobs.some((job) =>
+    ["ENROUTE", "CHARGING"].includes(job.current_step)
+  );
 
   return (
     <main className="container">
       <header className="header">
         <div>
           <p className="eyebrow">Juicer Operations</p>
-          <h1>Juicer Job Dashboard</h1>
+          <h1>Juicer Queue Dashboard</h1>
           <p className="subtitle">
-            Live first-come-first-serve dispatch queue.
+            First come, first serve queue. Only one job can be active at a time.
           </p>
         </div>
 
@@ -123,35 +113,30 @@ function App() {
 
       <section className="stats-grid">
         <div className="stat-card">
-          <span>Total Jobs</span>
+          <span>Active Queue</span>
           <strong>{stats.total}</strong>
         </div>
+
         <div className="stat-card">
-          <span>Payment Pending</span>
-          <strong>{stats.initiated}</strong>
-        </div>
-        <div className="stat-card">
-          <span>Assigned</span>
+          <span>Waiting</span>
           <strong>{stats.assigned}</strong>
         </div>
+
         <div className="stat-card">
           <span>Enroute</span>
           <strong>{stats.enroute}</strong>
         </div>
+
         <div className="stat-card">
           <span>Charging</span>
           <strong>{stats.charging}</strong>
-        </div>
-        <div className="stat-card">
-          <span>Completed</span>
-          <strong>{stats.completed}</strong>
         </div>
       </section>
 
       {loading ? (
         <p className="empty-text">Loading jobs...</p>
       ) : (
-        <section className="kanban">
+        <section className="kanban kanban-three">
           {STATUSES.map((status) => {
             const statusJobs = jobsByStatus(status.key);
 
@@ -173,6 +158,7 @@ function App() {
                         key={job.job_id}
                         job={job}
                         queuePosition={index + 1}
+                        hasActiveJob={hasActiveJob}
                         actionLoading={actionLoading}
                         updateJob={updateJob}
                       />
@@ -188,8 +174,16 @@ function App() {
   );
 }
 
-function JobCard({ job, queuePosition, actionLoading, updateJob }) {
+function JobCard({
+  job,
+  queuePosition,
+  hasActiveJob,
+  actionLoading,
+  updateJob,
+}) {
   const shortJobId = job.job_id.slice(0, 8);
+  const acceptDisabled =
+    hasActiveJob || actionLoading === `${job.job_id}-accept`;
 
   return (
     <article className="job-card">
@@ -200,7 +194,7 @@ function JobCard({ job, queuePosition, actionLoading, updateJob }) {
         </span>
       </div>
 
-      {job.current_step !== "COMPLETED" && (
+      {job.current_step === "ASSIGNED" && (
         <div className="queue-rank">Queue #{queuePosition}</div>
       )}
 
@@ -223,12 +217,20 @@ function JobCard({ job, queuePosition, actionLoading, updateJob }) {
 
       <div className="actions">
         {job.current_step === "ASSIGNED" && (
-          <button
-            onClick={() => updateJob(job.job_id, "accept")}
-            disabled={actionLoading === `${job.job_id}-accept`}
-          >
-            Accept Job
-          </button>
+          <>
+            <button
+              onClick={() => updateJob(job.job_id, "accept")}
+              disabled={acceptDisabled}
+            >
+              Accept Job
+            </button>
+
+            {hasActiveJob && (
+              <p className="hint-text">
+                Another job is already active. Complete it first.
+              </p>
+            )}
+          </>
         )}
 
         {job.current_step === "ENROUTE" && (
@@ -247,14 +249,6 @@ function JobCard({ job, queuePosition, actionLoading, updateJob }) {
           >
             Complete Session
           </button>
-        )}
-
-        {job.current_step === "INITIATED" && (
-          <p className="hint-text">Waiting for customer payment.</p>
-        )}
-
-        {job.current_step === "COMPLETED" && (
-          <p className="hint-text">Session closed.</p>
         )}
       </div>
     </article>

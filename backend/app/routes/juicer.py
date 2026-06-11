@@ -24,6 +24,19 @@ def serialize_job(job: Queue):
 def get_jobs(db: Session = Depends(get_db)):
     jobs = (
         db.query(Queue)
+        .filter(Queue.current_step.in_(["ASSIGNED", "ENROUTE", "CHARGING"]))
+        .order_by(Queue.created_at.asc())
+        .limit(100)
+        .all()
+    )
+
+    return [serialize_job(job) for job in jobs]
+
+
+@router.get("/jobs/all")
+def get_all_jobs(db: Session = Depends(get_db)):
+    jobs = (
+        db.query(Queue)
         .order_by(Queue.created_at.asc())
         .limit(100)
         .all()
@@ -43,6 +56,18 @@ def accept_job(job_id: str, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=400,
             detail=f"Job cannot be accepted from status {job.current_step}",
+        )
+
+    active_job = (
+        db.query(Queue)
+        .filter(Queue.current_step.in_(["ENROUTE", "CHARGING"]))
+        .first()
+    )
+
+    if active_job:
+        raise HTTPException(
+            status_code=400,
+            detail="Another job is already active. Complete it before accepting a new job.",
         )
 
     job.current_step = "ENROUTE"
