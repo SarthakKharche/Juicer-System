@@ -59,12 +59,17 @@ def send_whatsapp_payload(payload: dict) -> dict:
         "Content-Type": "application/json"
     }
 
+    print("Sending WhatsApp payload:", payload)
+
     response = requests.post(
         url,
         json=payload,
         headers=headers,
         timeout=15
     )
+
+    print("WhatsApp API status:", response.status_code)
+    print("WhatsApp API response:", response.text)
 
     try:
         return response.json()
