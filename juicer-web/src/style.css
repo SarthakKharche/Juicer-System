@@ -287,3 +287,12 @@ h1 {
     grid-template-columns: 1fr;
   }
 }
+
+.single-queue-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 520px);
+}
+
+.queue-column {
+  width: 100%;
+}

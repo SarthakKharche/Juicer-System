@@ -3,24 +3,6 @@ import { createRoot } from "react-dom/client";
 import { api } from "./api/client";
 import "./style.css";
 
-const STATUSES = [
-  {
-    key: "ASSIGNED",
-    title: "Queue",
-    description: "First come, first serve paid requests.",
-  },
-  {
-    key: "ENROUTE",
-    title: "Enroute",
-    description: "Current accepted job.",
-  },
-  {
-    key: "CHARGING",
-    title: "Charging",
-    description: "Vehicle is plugged in and charging.",
-  },
-];
-
 function App() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -70,26 +52,31 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const stats = useMemo(() => {
-    return {
-      total: jobs.length,
-      assigned: jobs.filter((job) => job.current_step === "ASSIGNED").length,
-      enroute: jobs.filter((job) => job.current_step === "ENROUTE").length,
-      charging: jobs.filter((job) => job.current_step === "CHARGING").length,
-    };
-  }, [jobs]);
-
-  function jobsByStatus(status) {
+  const queueJobs = useMemo(() => {
     return jobs
-      .filter((job) => job.current_step === status)
+      .filter((job) =>
+        ["ASSIGNED", "ENROUTE", "CHARGING"].includes(job.current_step)
+      )
       .sort(
         (a, b) =>
           new Date(a.created_at || a.updated_at) -
           new Date(b.created_at || b.updated_at)
       );
-  }
+  }, [jobs]);
 
-  const hasActiveJob = jobs.some((job) =>
+  const stats = useMemo(() => {
+    return {
+      total: queueJobs.length,
+      assigned: queueJobs.filter((job) => job.current_step === "ASSIGNED")
+        .length,
+      enroute: queueJobs.filter((job) => job.current_step === "ENROUTE")
+        .length,
+      charging: queueJobs.filter((job) => job.current_step === "CHARGING")
+        .length,
+    };
+  }, [queueJobs]);
+
+  const hasActiveJob = queueJobs.some((job) =>
     ["ENROUTE", "CHARGING"].includes(job.current_step)
   );
 
@@ -100,7 +87,8 @@ function App() {
           <p className="eyebrow">Juicer Operations</p>
           <h1>Juicer Queue Dashboard</h1>
           <p className="subtitle">
-            First come, first serve queue. Only one job can be active at a time.
+            First come, first serve queue. Enroute and charging update inside
+            the same queue card.
           </p>
         </div>
 
@@ -118,7 +106,7 @@ function App() {
         </div>
 
         <div className="stat-card">
-          <span>Waiting</span>
+          <span>Assigned</span>
           <strong>{stats.assigned}</strong>
         </div>
 
@@ -136,38 +124,35 @@ function App() {
       {loading ? (
         <p className="empty-text">Loading jobs...</p>
       ) : (
-        <section className="kanban kanban-three">
-          {STATUSES.map((status) => {
-            const statusJobs = jobsByStatus(status.key);
+        <section className="single-queue-layout">
+          <div className="column queue-column">
+            <div className="column-header">
+              <h2>Queue</h2>
+              <span>{queueJobs.length}</span>
+            </div>
 
-            return (
-              <div className="column" key={status.key}>
-                <div className="column-header">
-                  <h2>{status.title}</h2>
-                  <span>{statusJobs.length}</span>
-                </div>
+            <p className="column-description">
+              Live charging queue. New requests go to the end. Only one job can
+              be enroute or charging at a time.
+            </p>
 
-                <p className="column-description">{status.description}</p>
-
-                <div className="column-body">
-                  {statusJobs.length === 0 ? (
-                    <p className="empty-column">No jobs</p>
-                  ) : (
-                    statusJobs.map((job, index) => (
-                      <JobCard
-                        key={job.job_id}
-                        job={job}
-                        queuePosition={index + 1}
-                        hasActiveJob={hasActiveJob}
-                        actionLoading={actionLoading}
-                        updateJob={updateJob}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
-            );
-          })}
+            <div className="column-body">
+              {queueJobs.length === 0 ? (
+                <p className="empty-column">No active queue jobs</p>
+              ) : (
+                queueJobs.map((job, index) => (
+                  <JobCard
+                    key={job.job_id}
+                    job={job}
+                    queuePosition={index + 1}
+                    hasActiveJob={hasActiveJob}
+                    actionLoading={actionLoading}
+                    updateJob={updateJob}
+                  />
+                ))
+              )}
+            </div>
+          </div>
         </section>
       )}
     </main>
@@ -182,6 +167,7 @@ function JobCard({
   updateJob,
 }) {
   const shortJobId = job.job_id.slice(0, 8);
+
   const acceptDisabled =
     hasActiveJob || actionLoading === `${job.job_id}-accept`;
 
@@ -189,14 +175,13 @@ function JobCard({
     <article className="job-card">
       <div className="job-card-top">
         <h3>Slot {job.slot_id}</h3>
+
         <span className={`badge badge-${job.current_step.toLowerCase()}`}>
           {job.current_step}
         </span>
       </div>
 
-      {job.current_step === "ASSIGNED" && (
-        <div className="queue-rank">Queue #{queuePosition}</div>
-      )}
+      <div className="queue-rank">Queue #{queuePosition}</div>
 
       <div className="job-info">
         <p>
@@ -238,7 +223,7 @@ function JobCard({
             onClick={() => updateJob(job.job_id, "plugged-in")}
             disabled={actionLoading === `${job.job_id}-plugged-in`}
           >
-            Mark Plugged In
+            Start Charging
           </button>
         )}
 
