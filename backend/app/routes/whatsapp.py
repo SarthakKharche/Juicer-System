@@ -1,6 +1,8 @@
 import re
+
 from fastapi import APIRouter, Request, Depends, Response
 from sqlalchemy.orm import Session
+
 from app.config import settings
 from app.database import get_db
 from app.models import Queue
@@ -8,10 +10,15 @@ from app.services.whatsapp_service import send_whatsapp_text, send_payment_butto
 from app.services.queue_service import create_or_update_request, get_latest_job_by_phone
 
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["WhatsApp"])
+
 pending_slots: dict[str, str] = {}
 
 VEHICLE_NUMBER_PATTERN = re.compile(
     r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$"
+)
+
+SLOT_PATTERN = re.compile(
+    r"^[A-Z][0-9]+$"
 )
 
 
@@ -21,6 +28,14 @@ def normalize_vehicle_number(value: str) -> str:
 
 def is_valid_vehicle_number(value: str) -> bool:
     return bool(VEHICLE_NUMBER_PATTERN.match(value))
+
+
+def normalize_slot_id(value: str) -> str:
+    return value.upper().replace(" ", "").replace("-", "")
+
+
+def is_valid_slot_id(value: str) -> bool:
+    return bool(SLOT_PATTERN.match(value))
 
 
 @router.get("")
@@ -33,7 +48,7 @@ async def verify_webhook(request: Request):
     ):
         return Response(
             content=params.get("hub.challenge"),
-            media_type="text/plain"
+            media_type="text/plain",
         )
 
     return Response(status_code=403)
@@ -42,7 +57,7 @@ async def verify_webhook(request: Request):
 @router.post("")
 async def receive_webhook(
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     body = await request.json()
     print("Webhook received:", body)
@@ -54,7 +69,6 @@ async def receive_webhook(
         return {"ok": True}
 
     phone = message.get("from")
-
     text = (message.get("text") or {}).get("body", "").strip()
     lower_text = text.lower()
 
@@ -78,7 +92,7 @@ async def receive_webhook(
                     send_whatsapp_text(
                         phone,
                         f"Payment is already processed or not required.\n"
-                        f"Current status: {job.current_step}"
+                        f"Current status: {job.current_step}",
                     )
                     return {"ok": True}
 
@@ -91,7 +105,7 @@ async def receive_webhook(
                     "Payment successful ✅\n\n"
                     f"Job ID: {job.job_id}\n"
                     f"Status: {job.current_step}\n\n"
-                    "A Juicer operator will be assigned shortly."
+                    "A Juicer operator will be assigned shortly.",
                 )
 
                 return {"ok": True}
@@ -106,7 +120,7 @@ async def receive_webhook(
             "Scan a parking QR or send:\n"
             "Charge_Request_Slot_<slot>\n\n"
             "Example:\n"
-            "Charge_Request_Slot_B4"
+            "Charge_Request_Slot_S4",
         )
         return {"ok": True}
 
@@ -120,7 +134,7 @@ async def receive_webhook(
                 phone,
                 f"Status: {job.current_step}\n"
                 f"Slot: {job.slot_id}\n"
-                f"Vehicle: {job.vehicle_number or 'Pending'}"
+                f"Vehicle: {job.vehicle_number or 'Pending'}",
             )
 
         return {"ok": True}
@@ -128,19 +142,30 @@ async def receive_webhook(
     if lower_text == "stop":
         send_whatsapp_text(
             phone,
-            "Stop request received. If charging is active, our backend will stop the session."
+            "Stop request received. If charging is active, our backend will stop the session.",
         )
         return {"ok": True}
 
     if text.startswith("Charge_Request_Slot_"):
-        slot_id = text.replace("Charge_Request_Slot_", "").strip()
+        raw_slot_id = text.replace("Charge_Request_Slot_", "").strip()
+        slot_id = normalize_slot_id(raw_slot_id)
+
+        if not is_valid_slot_id(slot_id):
+            send_whatsapp_text(
+                phone,
+                "Invalid slot format ❌\n\n"
+                "Please scan a valid QR or send:\n"
+                "Charge_Request_Slot_S4",
+            )
+            return {"ok": True}
+
         pending_slots[phone] = slot_id
 
         send_whatsapp_text(
             phone,
             f"Slot {slot_id} received.\n\n"
             "Please send your vehicle number.\n"
-            "Example: MH12AB1234"
+            "Example: MH12AB1234",
         )
         return {"ok": True}
 
@@ -155,7 +180,7 @@ async def receive_webhook(
                 phone,
                 "Invalid vehicle number format ❌\n\n"
                 "Please send a valid Indian vehicle number.\n"
-                "Example: MH12AB1234"
+                "Example: MH12AB1234",
             )
 
             return {"ok": True}
@@ -164,7 +189,7 @@ async def receive_webhook(
             db,
             phone,
             slot_id,
-            vehicle_number
+            vehicle_number,
         )
 
         send_payment_button(phone, job.job_id)
@@ -174,7 +199,7 @@ async def receive_webhook(
     send_whatsapp_text(
         phone,
         "Sorry, I did not understand.\n\n"
-        "Send 'hi', 'status', or scan a Juicer QR code."
+        "Send 'hi', 'status', or scan a Juicer QR code.",
     )
 
     return {"ok": True}
