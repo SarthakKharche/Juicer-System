@@ -15,12 +15,20 @@ def serialize_job(job: Queue):
         "phone_number": job.phone_number,
         "vehicle_number": job.vehicle_number,
         "current_step": job.current_step,
+        "created_at": job.updated_at.isoformat() if job.updated_at else None,
+        "updated_at": job.updated_at.isoformat() if job.updated_at else None,
     }
 
 
 @router.get("/jobs")
 def get_jobs(db: Session = Depends(get_db)):
-    jobs = db.query(Queue).order_by(Queue.updated_at.desc()).limit(100).all()
+    jobs = (
+        db.query(Queue)
+        .order_by(Queue.updated_at.asc())
+        .limit(100)
+        .all()
+    )
+
     return [serialize_job(job) for job in jobs]
 
 
@@ -29,9 +37,10 @@ def get_active_jobs(db: Session = Depends(get_db)):
     jobs = (
         db.query(Queue)
         .filter(Queue.current_step.in_(["ASSIGNED", "ENROUTE", "CHARGING"]))
-        .order_by(Queue.updated_at.desc())
+        .order_by(Queue.updated_at.asc())
         .all()
     )
+
     return [serialize_job(job) for job in jobs]
 
 

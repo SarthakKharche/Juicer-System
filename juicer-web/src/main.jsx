@@ -7,12 +7,12 @@ const STATUSES = [
   {
     key: "INITIATED",
     title: "Payment Pending",
-    description: "Customer has created request but has not paid yet.",
+    description: "Customer created request but has not paid yet.",
   },
   {
     key: "ASSIGNED",
     title: "Assigned",
-    description: "Payment done. Waiting for Juicer to accept.",
+    description: "Payment done. First come, first serve queue.",
   },
   {
     key: "ENROUTE",
@@ -27,7 +27,7 @@ const STATUSES = [
   {
     key: "COMPLETED",
     title: "Completed",
-    description: "Charging session completed.",
+    description: "Recently completed sessions.",
   },
 ];
 
@@ -66,11 +66,7 @@ function App() {
       await loadJobs();
     } catch (err) {
       console.error(err);
-
-      const message =
-        err?.response?.data?.detail || "Action failed. Please try again.";
-
-      setError(message);
+      setError(err?.response?.data?.detail || "Action failed.");
     } finally {
       setActionLoading("");
     }
@@ -78,9 +74,7 @@ function App() {
 
   useEffect(() => {
     loadJobs();
-
     const interval = setInterval(loadJobs, 5000);
-
     return () => clearInterval(interval);
   }, []);
 
@@ -96,7 +90,17 @@ function App() {
   }, [jobs]);
 
   function jobsByStatus(status) {
-    return jobs.filter((job) => job.current_step === status);
+    const filtered = jobs.filter((job) => job.current_step === status);
+
+    if (status === "COMPLETED") {
+      return filtered.sort(
+        (a, b) => new Date(b.created_at || b.updated_at) - new Date(a.created_at || a.updated_at)
+      );
+    }
+
+    return filtered.sort(
+      (a, b) => new Date(a.created_at || a.updated_at) - new Date(b.created_at || b.updated_at)
+    );
   }
 
   return (
@@ -106,7 +110,7 @@ function App() {
           <p className="eyebrow">Juicer Operations</p>
           <h1>Juicer Job Dashboard</h1>
           <p className="subtitle">
-            Live job queue for movable fast charger operations.
+            Live first-come-first-serve dispatch queue.
           </p>
         </div>
 
@@ -122,27 +126,22 @@ function App() {
           <span>Total Jobs</span>
           <strong>{stats.total}</strong>
         </div>
-
         <div className="stat-card">
           <span>Payment Pending</span>
           <strong>{stats.initiated}</strong>
         </div>
-
         <div className="stat-card">
           <span>Assigned</span>
           <strong>{stats.assigned}</strong>
         </div>
-
         <div className="stat-card">
           <span>Enroute</span>
           <strong>{stats.enroute}</strong>
         </div>
-
         <div className="stat-card">
           <span>Charging</span>
           <strong>{stats.charging}</strong>
         </div>
-
         <div className="stat-card">
           <span>Completed</span>
           <strong>{stats.completed}</strong>
@@ -153,38 +152,43 @@ function App() {
         <p className="empty-text">Loading jobs...</p>
       ) : (
         <section className="kanban">
-          {STATUSES.map((status) => (
-            <div className="column" key={status.key}>
-              <div className="column-header">
-                <h2>{status.title}</h2>
-                <span>{jobsByStatus(status.key).length}</span>
-              </div>
+          {STATUSES.map((status) => {
+            const statusJobs = jobsByStatus(status.key);
 
-              <p className="column-description">{status.description}</p>
+            return (
+              <div className="column" key={status.key}>
+                <div className="column-header">
+                  <h2>{status.title}</h2>
+                  <span>{statusJobs.length}</span>
+                </div>
 
-              <div className="column-body">
-                {jobsByStatus(status.key).length === 0 ? (
-                  <p className="empty-column">No jobs</p>
-                ) : (
-                  jobsByStatus(status.key).map((job) => (
-                    <JobCard
-                      key={job.job_id}
-                      job={job}
-                      actionLoading={actionLoading}
-                      updateJob={updateJob}
-                    />
-                  ))
-                )}
+                <p className="column-description">{status.description}</p>
+
+                <div className="column-body">
+                  {statusJobs.length === 0 ? (
+                    <p className="empty-column">No jobs</p>
+                  ) : (
+                    statusJobs.map((job, index) => (
+                      <JobCard
+                        key={job.job_id}
+                        job={job}
+                        queuePosition={index + 1}
+                        actionLoading={actionLoading}
+                        updateJob={updateJob}
+                      />
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
       )}
     </main>
   );
 }
 
-function JobCard({ job, actionLoading, updateJob }) {
+function JobCard({ job, queuePosition, actionLoading, updateJob }) {
   const shortJobId = job.job_id.slice(0, 8);
 
   return (
@@ -195,6 +199,10 @@ function JobCard({ job, actionLoading, updateJob }) {
           {job.current_step}
         </span>
       </div>
+
+      {job.current_step !== "COMPLETED" && (
+        <div className="queue-rank">Queue #{queuePosition}</div>
+      )}
 
       <div className="job-info">
         <p>
