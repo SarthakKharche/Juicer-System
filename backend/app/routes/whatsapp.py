@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import Queue
+from app.models import Queue, ChargeStatus
 from app.services.whatsapp_service import send_whatsapp_text, send_payment_button
 from app.services.queue_service import create_or_update_request, get_latest_job_by_phone
 
@@ -51,6 +51,20 @@ def get_queue_position(db: Session, job: Queue):
             return index, len(active_jobs)
 
     return None, len(active_jobs)
+
+
+def get_energy_kwh(db: Session, job_id: str) -> float:
+    charge_status = (
+        db.query(ChargeStatus)
+        .filter(ChargeStatus.job_id == job_id)
+        .first()
+    )
+
+    if not charge_status:
+        return 0.0
+
+    current_wh = float(charge_status.current_wh_delivered or 0)
+    return current_wh / 1000
 
 
 @router.get("")
@@ -128,6 +142,34 @@ async def receive_webhook(
 
                 return {"ok": True}
 
+            if button_id.startswith("check_status:"):
+                job_id = button_id.split("check_status:")[1]
+                job = db.get(Queue, job_id)
+
+                if not job:
+                    send_whatsapp_text(phone, "Status not found. Job does not exist.")
+                    return {"ok": True}
+
+                energy_kwh = get_energy_kwh(db, job.job_id)
+                position, total = get_queue_position(db, job)
+
+                if job.current_step in ["ASSIGNED", "ENROUTE", "CHARGING"]:
+                    queue_line = f"Queue Position: #{position} of {total}\n"
+                else:
+                    queue_line = ""
+
+                send_whatsapp_text(
+                    phone,
+                    "Charging status ⚡\n\n"
+                    f"Status: {job.current_step}\n"
+                    f"{queue_line}"
+                    f"Slot: {job.slot_id}\n"
+                    f"Vehicle: {job.vehicle_number}\n"
+                    f"Energy Used: {energy_kwh:.2f} kWh",
+                )
+
+                return {"ok": True}
+
     if not phone or not text:
         return {"ok": True}
 
@@ -150,6 +192,7 @@ async def receive_webhook(
             return {"ok": True}
 
         position, total = get_queue_position(db, job)
+        energy_kwh = get_energy_kwh(db, job.job_id)
 
         if job.current_step == "INITIATED":
             message_text = (
@@ -166,7 +209,8 @@ async def receive_webhook(
                 f"Status: {job.current_step}\n"
                 f"Queue Position: #{position} of {total}\n"
                 f"Slot: {job.slot_id}\n"
-                f"Vehicle: {job.vehicle_number or 'Pending'}"
+                f"Vehicle: {job.vehicle_number or 'Pending'}\n"
+                f"Energy Used: {energy_kwh:.2f} kWh"
             )
 
         else:
@@ -174,7 +218,8 @@ async def receive_webhook(
                 "Your charging session is completed ✅\n\n"
                 f"Status: {job.current_step}\n"
                 f"Slot: {job.slot_id}\n"
-                f"Vehicle: {job.vehicle_number or 'Pending'}"
+                f"Vehicle: {job.vehicle_number or 'Pending'}\n"
+                f"Energy Used: {energy_kwh:.2f} kWh"
             )
 
         send_whatsapp_text(phone, message_text)

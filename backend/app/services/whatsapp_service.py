@@ -47,6 +47,37 @@ def send_payment_button(to: str, job_id: str) -> dict:
     return send_whatsapp_payload(payload)
 
 
+def send_status_button(to: str, job_id: str) -> dict:
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {
+                "text": (
+                    "Charging started ⚡\n\n"
+                    f"Job ID: {job_id}\n\n"
+                    "Tap below to check live charging status."
+                )
+            },
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": f"check_status:{job_id}",
+                            "title": "Check Status"
+                        }
+                    }
+                ]
+            }
+        }
+    }
+
+    return send_whatsapp_payload(payload)
+
+
 def send_whatsapp_payload(payload: dict) -> dict:
     if not settings.META_ACCESS_TOKEN or not settings.META_PHONE_NUMBER_ID:
         print("WhatsApp env vars missing. Payload not sent:", payload)

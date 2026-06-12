@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Queue
+from app.models import Queue, ChargeStatus
 from app.schemas import PluggedInRequest
+from app.services.whatsapp_service import send_status_button
 
 router = APIRouter(prefix="/juicer", tags=["Juicer"])
 
@@ -70,6 +71,19 @@ def accept_job(job_id: str, db: Session = Depends(get_db)):
             detail="Another job is already active. Complete it before accepting a new job.",
         )
 
+    first_assigned_job = (
+        db.query(Queue)
+        .filter(Queue.current_step == "ASSIGNED")
+        .order_by(Queue.created_at.asc())
+        .first()
+    )
+
+    if first_assigned_job and first_assigned_job.job_id != job.job_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Only the first job in the queue can be accepted.",
+        )
+
     job.current_step = "ENROUTE"
     db.commit()
     db.refresh(job)
@@ -99,8 +113,26 @@ def plugged_in(
         )
 
     job.current_step = "CHARGING"
+
+    charge_status = db.get(ChargeStatus, payload.charger_id)
+
+    if not charge_status:
+        charge_status = ChargeStatus(
+            active_charger_id=payload.charger_id,
+            job_id=job.job_id,
+            current_wh_delivered=0,
+            is_charging_active=True,
+        )
+        db.add(charge_status)
+    else:
+        charge_status.job_id = job.job_id
+        charge_status.current_wh_delivered = 0
+        charge_status.is_charging_active = True
+
     db.commit()
     db.refresh(job)
+
+    send_status_button(job.phone_number, job.job_id)
 
     return {
         "ok": True,
@@ -124,6 +156,16 @@ def complete_job(job_id: str, db: Session = Depends(get_db)):
         )
 
     job.current_step = "COMPLETED"
+
+    charge_status = (
+        db.query(ChargeStatus)
+        .filter(ChargeStatus.job_id == job.job_id)
+        .first()
+    )
+
+    if charge_status:
+        charge_status.is_charging_active = False
+
     db.commit()
     db.refresh(job)
 
