@@ -4,7 +4,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Queue, ChargeStatus
 from app.schemas import PluggedInRequest
-from app.services.whatsapp_service import send_status_button
+from app.services.whatsapp_service import (
+    send_status_button,
+    send_whatsapp_text,
+)
 
 router = APIRouter(prefix="/juicer", tags=["Juicer"])
 
@@ -155,22 +158,35 @@ def complete_job(job_id: str, db: Session = Depends(get_db)):
             detail=f"Job cannot be completed from status {job.current_step}",
         )
 
-    job.current_step = "COMPLETED"
-
     charge_status = (
         db.query(ChargeStatus)
         .filter(ChargeStatus.job_id == job.job_id)
         .first()
     )
 
+    energy_kwh = 0.0
+
     if charge_status:
+        energy_kwh = float(charge_status.current_wh_delivered or 0) / 1000
         charge_status.is_charging_active = False
+
+    job.current_step = "COMPLETED"
 
     db.commit()
     db.refresh(job)
+
+    send_whatsapp_text(
+        job.phone_number,
+        "Charging completed ✅\n\n"
+        f"Vehicle: {job.vehicle_number}\n"
+        f"Slot: {job.slot_id}\n"
+        f"Energy Delivered: {energy_kwh:.2f} kWh\n\n"
+        "Thank you for using Juicer ⚡",
+    )
 
     return {
         "ok": True,
         "job_id": job.job_id,
         "current_step": job.current_step,
+        "energy_kwh": energy_kwh,
     }
