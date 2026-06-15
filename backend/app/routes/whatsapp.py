@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import Queue, ChargeStatus
+from app.models import Queue, ChargeStatus, ParkingSlot
 from app.services.whatsapp_service import send_whatsapp_text, send_payment_button
 from app.services.queue_service import create_or_update_request, get_latest_job_by_phone
 
@@ -284,16 +284,41 @@ async def receive_webhook(
 
     if text.startswith("Charge_Request_Slot_"):
         raw_slot_id = text.replace("Charge_Request_Slot_", "").strip()
-        slot_id = normalize_slot_id(raw_slot_id)
-
-        if not is_valid_slot_id(slot_id):
-            send_whatsapp_text(
-                phone,
-                "Invalid slot format ❌\n\n"
-                "Please scan a valid QR or send:\n"
-                "Charge_Request_Slot_S4",
-            )
-            return {"ok": True}
+        
+        # Check if raw_slot_id is a secure qr_token
+        slot_record = db.query(ParkingSlot).filter(ParkingSlot.qr_token == raw_slot_id).first()
+        
+        if slot_record:
+            if not slot_record.is_active:
+                send_whatsapp_text(
+                    phone,
+                    "This parking slot QR code has been deactivated ❌\n\n"
+                    "Please contact the admin.",
+                )
+                return {"ok": True}
+            slot_id = slot_record.slot_id
+        else:
+            # Fallback for slot_id matching directly
+            slot_id = normalize_slot_id(raw_slot_id)
+            # Check if this slot exists in our DB
+            db_slot = db.query(ParkingSlot).filter(ParkingSlot.slot_id == slot_id).first()
+            if db_slot:
+                if not db_slot.is_active:
+                    send_whatsapp_text(
+                        phone,
+                        "This parking slot QR code has been deactivated ❌\n\n"
+                        "Please contact the admin.",
+                    )
+                    return {"ok": True}
+            elif not is_valid_slot_id(slot_id):
+                # If it doesn't exist in our DB and is not a valid format
+                send_whatsapp_text(
+                    phone,
+                    "Invalid slot ID or QR code format ❌\n\n"
+                    "Please scan a valid QR or send:\n"
+                    "Charge_Request_Slot_S4",
+                )
+                return {"ok": True}
 
         pending_slots[phone] = slot_id
 

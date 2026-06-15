@@ -81,7 +81,10 @@ def send_status_button(to: str, job_id: str) -> dict:
 
 def send_whatsapp_payload(payload: dict) -> dict:
     if not settings.META_ACCESS_TOKEN or not settings.META_PHONE_NUMBER_ID:
-        print("WhatsApp env vars missing. Payload not sent:", payload)
+        try:
+            print("WhatsApp env vars missing. Payload not sent:", payload)
+        except UnicodeEncodeError:
+            print("WhatsApp env vars missing. Payload not sent (Unicode-safe):", str(payload).encode('ascii', 'replace').decode('ascii'))
         return {"skipped": True}
 
     url = f"https://graph.facebook.com/v25.0/{settings.META_PHONE_NUMBER_ID}/messages"
@@ -91,7 +94,10 @@ def send_whatsapp_payload(payload: dict) -> dict:
         "Content-Type": "application/json",
     }
 
-    print("Sending WhatsApp payload:", payload)
+    try:
+        print("Sending WhatsApp payload:", payload)
+    except UnicodeEncodeError:
+        print("Sending WhatsApp payload (Unicode-safe):", str(payload).encode('ascii', 'replace').decode('ascii'))
 
     response = requests.post(
         url,
