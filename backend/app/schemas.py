@@ -23,3 +23,16 @@ class TelemetryRequest(BaseModel):
     job_id: str
     current_wh_delivered: float
     target_wh_limit: float
+
+class ParkingSlotCreate(BaseModel):
+    slot_id: str
+
+class ParkingSlotResponse(BaseModel):
+    slot_id: str
+    qr_token: str
+    is_active: bool
+    created_at: str
+
+    class Config:
+        from_attributes = True
+

@@ -52,3 +52,12 @@ class ChargeStatus(Base):
         server_default=func.now(),
         onupdate=func.now()
     )
+
+
+class ParkingSlot(Base):
+    __tablename__ = "parking_slots"
+
+    slot_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    qr_token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())

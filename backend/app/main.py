@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import Base, engine
-from app.routes import whatsapp, customer, juicer, payment, charger
+from app.routes import whatsapp, customer, juicer, payment, charger, admin
 
 Base.metadata.create_all(bind=engine)
 
@@ -20,6 +20,8 @@ app.include_router(customer.router)
 app.include_router(juicer.router)
 app.include_router(payment.router)
 app.include_router(charger.router)
+app.include_router(admin.router)
+
 
 @app.get("/health")
 def health():
