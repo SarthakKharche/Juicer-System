@@ -296,3 +296,8 @@ h1 {
 .queue-column {
   width: 100%;
 }
+
+.badge-stop_requested {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}

@@ -46,16 +46,16 @@ function App() {
 
   useEffect(() => {
     loadJobs();
-
     const interval = setInterval(loadJobs, 5000);
-
     return () => clearInterval(interval);
   }, []);
 
   const queueJobs = useMemo(() => {
     return jobs
       .filter((job) =>
-        ["ASSIGNED", "ENROUTE", "CHARGING"].includes(job.current_step)
+        ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"].includes(
+          job.current_step
+        )
       )
       .sort(
         (a, b) =>
@@ -73,11 +73,14 @@ function App() {
         .length,
       charging: queueJobs.filter((job) => job.current_step === "CHARGING")
         .length,
+      stopRequested: queueJobs.filter(
+        (job) => job.current_step === "STOP_REQUESTED"
+      ).length,
     };
   }, [queueJobs]);
 
   const hasActiveJob = queueJobs.some((job) =>
-    ["ENROUTE", "CHARGING"].includes(job.current_step)
+    ["ENROUTE", "CHARGING", "STOP_REQUESTED"].includes(job.current_step)
   );
 
   const firstAssignedJob = queueJobs.find(
@@ -122,6 +125,11 @@ function App() {
         <div className="stat-card">
           <span>Charging</span>
           <strong>{stats.charging}</strong>
+        </div>
+
+        <div className="stat-card">
+          <span>Stop Requested</span>
+          <strong>{stats.stopRequested}</strong>
         </div>
       </section>
 
@@ -249,6 +257,19 @@ function JobCard({
           >
             Complete Session
           </button>
+        )}
+
+        {job.current_step === "STOP_REQUESTED" && (
+          <>
+            <button
+              onClick={() => updateJob(job.job_id, "complete")}
+              disabled={actionLoading === `${job.job_id}-complete`}
+            >
+              Stop Charging & Complete
+            </button>
+
+            <p className="hint-text">Customer requested immediate stop.</p>
+          </>
         )}
       </div>
     </article>

@@ -11,6 +11,8 @@ from app.services.whatsapp_service import (
 
 router = APIRouter(prefix="/juicer", tags=["Juicer"])
 
+ACTIVE_STEPS = ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]
+
 
 def serialize_job(job: Queue):
     return {
@@ -28,7 +30,7 @@ def serialize_job(job: Queue):
 def get_jobs(db: Session = Depends(get_db)):
     jobs = (
         db.query(Queue)
-        .filter(Queue.current_step.in_(["ASSIGNED", "ENROUTE", "CHARGING"]))
+        .filter(Queue.current_step.in_(ACTIVE_STEPS))
         .order_by(Queue.created_at.asc())
         .limit(100)
         .all()
@@ -64,7 +66,7 @@ def accept_job(job_id: str, db: Session = Depends(get_db)):
 
     active_job = (
         db.query(Queue)
-        .filter(Queue.current_step.in_(["ENROUTE", "CHARGING"]))
+        .filter(Queue.current_step.in_(["ENROUTE", "CHARGING", "STOP_REQUESTED"]))
         .first()
     )
 
@@ -152,7 +154,7 @@ def complete_job(job_id: str, db: Session = Depends(get_db)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if job.current_step != "CHARGING":
+    if job.current_step not in ["CHARGING", "STOP_REQUESTED"]:
         raise HTTPException(
             status_code=400,
             detail=f"Job cannot be completed from status {job.current_step}",

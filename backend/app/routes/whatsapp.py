@@ -45,7 +45,7 @@ def is_valid_slot_id(value: str) -> bool:
 def get_queue_position(db: Session, job: Queue):
     active_jobs = (
         db.query(Queue)
-        .filter(Queue.current_step.in_(["ASSIGNED", "ENROUTE", "CHARGING"]))
+        .filter(Queue.current_step.in_(["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]))
         .order_by(Queue.created_at.asc())
         .all()
     )
@@ -159,10 +159,9 @@ async def receive_webhook(
                 energy_kwh = get_energy_kwh(db, job.job_id)
                 position, total = get_queue_position(db, job)
 
-                if job.current_step in ["ASSIGNED", "ENROUTE", "CHARGING"]:
+                queue_line = ""
+                if job.current_step in ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]:
                     queue_line = f"Queue Position: #{position} of {total}\n"
-                else:
-                    queue_line = ""
 
                 send_whatsapp_text(
                     phone,
@@ -212,7 +211,7 @@ async def receive_webhook(
                 "Please complete payment to join the queue."
             )
 
-        elif job.current_step in ["ASSIGNED", "ENROUTE", "CHARGING"]:
+        elif job.current_step in ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]:
             message_text = (
                 "Your Juicer request status ⚡\n\n"
                 f"Status: {job.current_step}\n"
@@ -239,15 +238,50 @@ async def receive_webhook(
         return {"ok": True}
 
     if command in ["stop", "stop charging", "end", "end charging"]:
-        send_whatsapp_text(
-            phone,
-            "Charging stop request received 🛑\n\n"
-            "A Juicer operator has been notified.\n"
-            "Type STATUS anytime to check the latest session status.",
-        )
+        job = get_latest_job_by_phone(db, phone)
+
+        if not job:
+            send_whatsapp_text(phone, "No active charging session found.")
+            return {"ok": True}
+
+        if job.current_step == "CHARGING":
+            job.current_step = "STOP_REQUESTED"
+
+            charge_status = (
+                db.query(ChargeStatus)
+                .filter(ChargeStatus.job_id == job.job_id)
+                .first()
+            )
+
+            if charge_status:
+                charge_status.is_charging_active = False
+
+            db.commit()
+            db.refresh(job)
+
+            send_whatsapp_text(
+                phone,
+                "Charging stop request received 🛑\n\n"
+                "Charging will be stopped immediately by the Juicer operator.\n"
+                "Type STATUS anytime to check the latest session status.",
+            )
+
+        elif job.current_step == "STOP_REQUESTED":
+            send_whatsapp_text(
+                phone,
+                "Stop request is already active 🛑\n\n"
+                "The Juicer operator has been notified.",
+            )
+
+        else:
+            send_whatsapp_text(
+                phone,
+                f"Stop is only available while charging.\n"
+                f"Current status: {job.current_step}",
+            )
+
         return {"ok": True}
 
-    # Do not binary-map this command. Keep this exact command format.
     if text.startswith("Charge_Request_Slot_"):
         raw_slot_id = text.replace("Charge_Request_Slot_", "").strip()
         slot_id = normalize_slot_id(raw_slot_id)
