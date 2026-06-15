@@ -22,6 +22,10 @@ SLOT_PATTERN = re.compile(
 )
 
 
+def normalize_command(value: str) -> str:
+    return value.strip().lower()
+
+
 def normalize_vehicle_number(value: str) -> str:
     return value.upper().replace(" ", "").replace("-", "")
 
@@ -99,7 +103,7 @@ async def receive_webhook(
 
     phone = message.get("from")
     text = (message.get("text") or {}).get("body", "").strip()
-    lower_text = text.lower()
+    command = normalize_command(text)
 
     interactive = message.get("interactive")
 
@@ -137,6 +141,8 @@ async def receive_webhook(
                     f"Job ID: {job.job_id}\n"
                     f"Status: {job.current_step}\n"
                     f"Queue Position: #{position} of {total}\n\n"
+                    "Type STATUS anytime to check live queue and charging status.\n"
+                    "Type STOP to request stop charging.\n\n"
                     "A Juicer operator will serve requests first come, first serve.",
                 )
 
@@ -160,12 +166,14 @@ async def receive_webhook(
 
                 send_whatsapp_text(
                     phone,
-                    "Charging status ⚡\n\n"
+                    "Live Charging Status ⚡\n\n"
                     f"Status: {job.current_step}\n"
                     f"{queue_line}"
                     f"Slot: {job.slot_id}\n"
                     f"Vehicle: {job.vehicle_number}\n"
-                    f"Energy Used: {energy_kwh:.2f} kWh",
+                    f"Energy Used: {energy_kwh:.2f} kWh\n\n"
+                    "Type STATUS anytime for live status.\n"
+                    "Type STOP to request stop charging.",
                 )
 
                 return {"ok": True}
@@ -173,7 +181,7 @@ async def receive_webhook(
     if not phone or not text:
         return {"ok": True}
 
-    if lower_text in ["hi", "hello", "start"]:
+    if command in ["hi", "hello", "start"]:
         send_whatsapp_text(
             phone,
             "Welcome to Juicer EV Charging ⚡\n\n"
@@ -184,7 +192,7 @@ async def receive_webhook(
         )
         return {"ok": True}
 
-    if lower_text == "status":
+    if command in ["status", "live status", "check status", "vehicle status"]:
         job = get_latest_job_by_phone(db, phone)
 
         if not job:
@@ -198,6 +206,7 @@ async def receive_webhook(
             message_text = (
                 "Your charging request is created ✅\n\n"
                 "Status: Payment Pending\n"
+                f"Job ID: {job.job_id}\n"
                 f"Slot: {job.slot_id}\n"
                 f"Vehicle: {job.vehicle_number or 'Pending'}\n\n"
                 "Please complete payment to join the queue."
@@ -207,16 +216,20 @@ async def receive_webhook(
             message_text = (
                 "Your Juicer request status ⚡\n\n"
                 f"Status: {job.current_step}\n"
+                f"Job ID: {job.job_id}\n"
                 f"Queue Position: #{position} of {total}\n"
                 f"Slot: {job.slot_id}\n"
                 f"Vehicle: {job.vehicle_number or 'Pending'}\n"
-                f"Energy Used: {energy_kwh:.2f} kWh"
+                f"Energy Used: {energy_kwh:.2f} kWh\n\n"
+                "Type STATUS anytime for live status.\n"
+                "Type STOP to request stop charging."
             )
 
         else:
             message_text = (
                 "Your charging session is completed ✅\n\n"
                 f"Status: {job.current_step}\n"
+                f"Job ID: {job.job_id}\n"
                 f"Slot: {job.slot_id}\n"
                 f"Vehicle: {job.vehicle_number or 'Pending'}\n"
                 f"Energy Used: {energy_kwh:.2f} kWh"
@@ -225,13 +238,16 @@ async def receive_webhook(
         send_whatsapp_text(phone, message_text)
         return {"ok": True}
 
-    if lower_text == "stop":
+    if command in ["stop", "stop charging", "end", "end charging"]:
         send_whatsapp_text(
             phone,
-            "Stop request received. If charging is active, our backend will stop the session.",
+            "Charging stop request received 🛑\n\n"
+            "A Juicer operator has been notified.\n"
+            "Type STATUS anytime to check the latest session status.",
         )
         return {"ok": True}
 
+    # Do not binary-map this command. Keep this exact command format.
     if text.startswith("Charge_Request_Slot_"):
         raw_slot_id = text.replace("Charge_Request_Slot_", "").strip()
         slot_id = normalize_slot_id(raw_slot_id)
@@ -285,7 +301,7 @@ async def receive_webhook(
     send_whatsapp_text(
         phone,
         "Sorry, I did not understand.\n\n"
-        "Send 'hi', 'status', or scan a Juicer QR code.",
+        "Send 'hi', 'status', 'stop', or scan a Juicer QR code.",
     )
 
     return {"ok": True}

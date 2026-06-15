@@ -7,9 +7,7 @@ def send_whatsapp_text(to: str, text: str) -> dict:
         "messaging_product": "whatsapp",
         "to": to,
         "type": "text",
-        "text": {
-            "body": text
-        }
+        "text": {"body": text},
     }
 
     return send_whatsapp_payload(payload)
@@ -36,12 +34,12 @@ def send_payment_button(to: str, job_id: str) -> dict:
                         "type": "reply",
                         "reply": {
                             "id": f"fake_pay:{job_id}",
-                            "title": "Pay ₹100"
-                        }
+                            "title": "Pay ₹100",
+                        },
                     }
                 ]
-            }
-        }
+            },
+        },
     }
 
     return send_whatsapp_payload(payload)
@@ -58,7 +56,10 @@ def send_status_button(to: str, job_id: str) -> dict:
                 "text": (
                     "Charging started ⚡\n\n"
                     f"Job ID: {job_id}\n\n"
-                    "Tap below to check live charging status."
+                    "You can:\n"
+                    "• Tap Check Status\n"
+                    "• Type STATUS anytime\n"
+                    "• Type STOP to request stop charging"
                 )
             },
             "action": {
@@ -67,12 +68,12 @@ def send_status_button(to: str, job_id: str) -> dict:
                         "type": "reply",
                         "reply": {
                             "id": f"check_status:{job_id}",
-                            "title": "Check Status"
-                        }
+                            "title": "Check Status",
+                        },
                     }
                 ]
-            }
-        }
+            },
+        },
     }
 
     return send_whatsapp_payload(payload)
@@ -87,7 +88,7 @@ def send_whatsapp_payload(payload: dict) -> dict:
 
     headers = {
         "Authorization": f"Bearer {settings.META_ACCESS_TOKEN}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
     print("Sending WhatsApp payload:", payload)
@@ -96,7 +97,7 @@ def send_whatsapp_payload(payload: dict) -> dict:
         url,
         json=payload,
         headers=headers,
-        timeout=15
+        timeout=15,
     )
 
     print("WhatsApp API status:", response.status_code)
@@ -107,5 +108,5 @@ def send_whatsapp_payload(payload: dict) -> dict:
     except Exception:
         return {
             "status_code": response.status_code,
-            "text": response.text
+            "text": response.text,
         }
