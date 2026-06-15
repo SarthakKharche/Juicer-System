@@ -1,0 +1,280 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: #f6f8fb;
+  color: #172033;
+}
+
+button {
+  font: inherit;
+}
+
+.page {
+  width: min(1280px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 26px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+h1 {
+  margin: 0;
+  font-size: 38px;
+  color: #111827;
+}
+
+.subtitle {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 17px;
+}
+
+.refresh {
+  border: 1px solid #d7dce6;
+  background: white;
+  color: #111827;
+  border-radius: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.refresh:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.error,
+.loading,
+.empty {
+  border: 1px solid #e5e7eb;
+  background: white;
+  border-radius: 16px;
+  padding: 18px;
+  color: #64748b;
+}
+
+.error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+  margin-bottom: 18px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.metric-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+}
+
+.metric-card span {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.metric-card strong {
+  font-size: 34px;
+  color: #0f172a;
+}
+
+.layout-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.panel {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 18px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 21px;
+  color: #111827;
+}
+
+.panel p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.table {
+  display: grid;
+  gap: 8px;
+}
+
+.table-head,
+.table-row {
+  display: grid;
+  gap: 12px;
+  align-items: center;
+}
+
+.table-head {
+  padding: 0 12px 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.table-row {
+  min-height: 54px;
+  padding: 12px;
+  border: 1px solid #edf0f5;
+  border-radius: 14px;
+  background: #fbfdff;
+  color: #334155;
+}
+
+.table-row strong {
+  color: #111827;
+}
+
+.table-row small {
+  display: block;
+  margin-top: 3px;
+  color: #94a3b8;
+}
+
+.chargers-grid {
+  grid-template-columns: 1.1fr 1fr 1.4fr;
+}
+
+.juicers-grid {
+  grid-template-columns: 1.3fr 1fr 1.3fr;
+}
+
+.jobs-grid {
+  grid-template-columns: 0.8fr 1.2fr 1.2fr 1fr 0.8fr;
+}
+
+.badge {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.badge-available,
+.badge-completed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-busy,
+.badge-charging {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.badge-on_job,
+.badge-enroute,
+.badge-assigned {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-stop_requested {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.badge-initiated {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+@media (max-width: 1000px) {
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .layout-two {
+    grid-template-columns: 1fr;
+  }
+
+  .jobs-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .table-head.jobs-grid {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .page {
+    width: min(100% - 24px, 1280px);
+    padding-top: 22px;
+  }
+
+  .topbar {
+    flex-direction: column;
+  }
+
+  h1 {
+    font-size: 30px;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .chargers-grid,
+  .juicers-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .table-head.chargers-grid,
+  .table-head.juicers-grid {
+    display: none;
+  }
+}
