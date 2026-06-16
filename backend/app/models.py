@@ -1,4 +1,4 @@
-from sqlalchemy import String, Boolean, Numeric, DateTime, ForeignKey
+from sqlalchemy import String, Boolean, Numeric, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from app.database import Base
@@ -17,7 +17,7 @@ class Queue(Base):
     __tablename__ = "queue"
 
     job_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    slot_id: Mapped[str] = mapped_column(String(16), nullable=False)
+    slot_id: Mapped[str] = mapped_column(String(96), nullable=False)
     phone_number: Mapped[str] = mapped_column(String(24), nullable=False)
     vehicle_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     current_step: Mapped[str] = mapped_column(String(32), nullable=False, default="INITIATED")
@@ -26,7 +26,7 @@ class Queue(Base):
     updated_at: Mapped[DateTime] = mapped_column(
         DateTime,
         server_default=func.now(),
-        onupdate=func.now()
+        onupdate=func.now(),
     )
 
 
@@ -50,14 +50,32 @@ class ChargeStatus(Base):
     last_pulse_at: Mapped[DateTime] = mapped_column(
         DateTime,
         server_default=func.now(),
-        onupdate=func.now()
+        onupdate=func.now(),
     )
+
+
+class Building(Base):
+    __tablename__ = "buildings"
+
+    building_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    building_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    building_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
 
 
 class ParkingSlot(Base):
     __tablename__ = "parking_slots"
+    __table_args__ = (
+        UniqueConstraint("building_id", "slot_id", name="uq_parking_slot_building_slot"),
+    )
 
-    slot_id: Mapped[str] = mapped_column(String(16), primary_key=True)
-    qr_token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    parking_slot_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    building_id: Mapped[str] = mapped_column(String(32), ForeignKey("buildings.building_id"), nullable=False)
+    slot_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    floor: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    zone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    qr_token: Mapped[str] = mapped_column(String(96), nullable=False, unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
