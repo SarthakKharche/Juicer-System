@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Queue, ChargeStatus
+from app.models import Queue, ChargeStatus, Building, ParkingSlot
 from app.schemas import PluggedInRequest
 from app.services.whatsapp_service import (
     send_status_button,
@@ -14,17 +14,31 @@ router = APIRouter(prefix="/juicer", tags=["Juicer"])
 ACTIVE_STEPS = ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]
 
 
-def serialize_job(job: Queue):
+def serialize_job(job: Queue, db: Session | None = None):
+    building = None
+    parking_slot = None
+
+    if db and getattr(job, "building_id", None):
+        building = db.get(Building, job.building_id)
+
+    if db and getattr(job, "parking_slot_id", None):
+        parking_slot = db.get(ParkingSlot, job.parking_slot_id)
+
     return {
         "job_id": job.job_id,
         "slot_id": job.slot_id,
+        "building_id": job.building_id,
+        "building_name": building.building_name if building else None,
+        "building_type": building.building_type if building else None,
+        "parking_slot_id": job.parking_slot_id,
+        "floor": parking_slot.floor if parking_slot else None,
+        "zone": parking_slot.zone if parking_slot else None,
         "phone_number": job.phone_number,
         "vehicle_number": job.vehicle_number,
         "current_step": job.current_step,
         "created_at": job.created_at.isoformat() if job.created_at else None,
         "updated_at": job.updated_at.isoformat() if job.updated_at else None,
     }
-
 
 @router.get("/jobs")
 def get_jobs(db: Session = Depends(get_db)):
@@ -36,7 +50,7 @@ def get_jobs(db: Session = Depends(get_db)):
         .all()
     )
 
-    return [serialize_job(job) for job in jobs]
+    return [serialize_job(job, db) for job in jobs]
 
 
 @router.get("/jobs/all")
@@ -48,7 +62,7 @@ def get_all_jobs(db: Session = Depends(get_db)):
         .all()
     )
 
-    return [serialize_job(job) for job in jobs]
+    return [serialize_job(job, db) for job in jobs]
 
 
 @router.post("/jobs/{job_id}/accept")

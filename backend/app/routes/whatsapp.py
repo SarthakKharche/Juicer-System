@@ -5,21 +5,21 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import Queue, ChargeStatus, ParkingSlot
+from app.models import Queue, ChargeStatus, Building, ParkingSlot
 from app.services.whatsapp_service import send_whatsapp_text, send_payment_button
 from app.services.queue_service import create_or_update_request, get_latest_job_by_phone
 
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["WhatsApp"])
 
-pending_slots: dict[str, str] = {}
+# phone -> resolved parking slot context
+pending_slots: dict[str, dict[str, str]] = {}
 
-VEHICLE_NUMBER_PATTERN = re.compile(
-    r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$"
+VEHICLE_NUMBER_PATTERN = re.compile(r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$")
+BUILDING_SLOT_PATTERN = re.compile(
+    r"^Charge_Request_Building_(?P<building_id>.+)_Slot_(?P<slot_id>[^_\s]+)$",
+    re.IGNORECASE,
 )
-
-SLOT_PATTERN = re.compile(
-    r"^[A-Z][0-9]+$"
-)
+ACTIVE_STEPS = ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]
 
 
 def normalize_command(value: str) -> str:
@@ -34,18 +34,14 @@ def is_valid_vehicle_number(value: str) -> bool:
     return bool(VEHICLE_NUMBER_PATTERN.match(value))
 
 
-def normalize_slot_id(value: str) -> str:
-    return value.upper().replace(" ", "").replace("-", "")
-
-
-def is_valid_slot_id(value: str) -> bool:
-    return bool(SLOT_PATTERN.match(value))
+def normalize_id(value: str) -> str:
+    return value.strip().upper().replace(" ", "_")
 
 
 def get_queue_position(db: Session, job: Queue):
     active_jobs = (
         db.query(Queue)
-        .filter(Queue.current_step.in_(["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]))
+        .filter(Queue.current_step.in_(ACTIVE_STEPS))
         .order_by(Queue.created_at.asc())
         .all()
     )
@@ -58,40 +54,101 @@ def get_queue_position(db: Session, job: Queue):
 
 
 def get_energy_kwh(db: Session, job_id: str) -> float:
-    charge_status = (
-        db.query(ChargeStatus)
-        .filter(ChargeStatus.job_id == job_id)
+    charge_status = db.query(ChargeStatus).filter(ChargeStatus.job_id == job_id).first()
+    if not charge_status:
+        return 0.0
+    current_wh = float(charge_status.current_wh_delivered or 0)
+    return current_wh / 1000
+
+
+def get_building_name(db: Session, building_id: str | None) -> str | None:
+    if not building_id:
+        return None
+    building = db.get(Building, building_id)
+    return building.building_name if building else building_id
+
+
+def format_job_location(db: Session, job: Queue) -> str:
+    building_name = get_building_name(db, getattr(job, "building_id", None))
+    if building_name:
+        return f"Building: {building_name}\nSlot: {job.slot_id}"
+    return f"Slot: {job.slot_id}"
+
+
+def find_slot_by_token(db: Session, qr_token: str) -> ParkingSlot | None:
+    return db.query(ParkingSlot).filter(ParkingSlot.qr_token == qr_token).first()
+
+
+def find_slot_by_building_and_slot(db: Session, building_id: str, slot_id: str) -> ParkingSlot | None:
+    return (
+        db.query(ParkingSlot)
+        .filter(
+            ParkingSlot.building_id == normalize_id(building_id),
+            ParkingSlot.slot_id == normalize_id(slot_id),
+        )
         .first()
     )
 
-    if not charge_status:
-        return 0.0
 
-    current_wh = float(charge_status.current_wh_delivered or 0)
-    return current_wh / 1000
+def resolve_slot_from_message(db: Session, text: str) -> tuple[ParkingSlot | None, str]:
+    """
+    Supported formats:
+    1. Secure QR token format:
+       Charge_Request_Slot_<qr_token>
+
+    2. Manual fallback format:
+       Charge_Request_Building_MANTRA_MOMENTS_Slot_I41
+
+    Plain slot-only manual commands are rejected because the same slot can exist
+    in multiple buildings.
+    """
+    message_text = text.strip()
+
+    manual_match = BUILDING_SLOT_PATTERN.match(message_text)
+    if manual_match:
+        building_id = manual_match.group("building_id")
+        slot_id = manual_match.group("slot_id")
+        slot = find_slot_by_building_and_slot(db, building_id, slot_id)
+        if not slot:
+            return None, "BUILDING_SLOT_NOT_FOUND"
+        if not slot.is_active:
+            return None, "INACTIVE"
+        return slot, "BUILDING_SLOT"
+
+    if message_text.startswith("Charge_Request_Slot_"):
+        raw_value = message_text.replace("Charge_Request_Slot_", "", 1).strip()
+        slot = find_slot_by_token(db, raw_value)
+        if slot:
+            if not slot.is_active:
+                return None, "INACTIVE"
+            return slot, "TOKEN"
+
+        # Reject legacy slot-only messages such as Charge_Request_Slot_I41.
+        return None, "LEGACY_SLOT_ONLY"
+
+    return None, "NO_MATCH"
+
+
+def slot_context(slot: ParkingSlot) -> dict[str, str]:
+    return {
+        "building_id": slot.building_id,
+        "parking_slot_id": slot.parking_slot_id,
+        "slot_id": slot.slot_id,
+    }
 
 
 @router.get("")
 async def verify_webhook(request: Request):
     params = request.query_params
 
-    if (
-        params.get("hub.mode") == "subscribe"
-        and params.get("hub.verify_token") == settings.VERIFY_TOKEN
-    ):
-        return Response(
-            content=params.get("hub.challenge"),
-            media_type="text/plain",
-        )
+    if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == settings.VERIFY_TOKEN:
+        return Response(content=params.get("hub.challenge"), media_type="text/plain")
 
     return Response(status_code=403)
 
 
 @router.post("")
-async def receive_webhook(
-    request: Request,
-    db: Session = Depends(get_db),
-):
+async def receive_webhook(request: Request, db: Session = Depends(get_db)):
     body = await request.json()
     print("Webhook received:", body)
 
@@ -124,8 +181,7 @@ async def receive_webhook(
                 if job.current_step != "INITIATED":
                     send_whatsapp_text(
                         phone,
-                        f"Payment is already processed or not required.\n"
-                        f"Current status: {job.current_step}",
+                        f"Payment is already processed or not required.\nCurrent status: {job.current_step}",
                     )
                     return {"ok": True}
 
@@ -134,18 +190,19 @@ async def receive_webhook(
                 db.refresh(job)
 
                 position, total = get_queue_position(db, job)
+                location = format_job_location(db, job)
 
                 send_whatsapp_text(
                     phone,
                     "Payment successful ✅\n\n"
                     f"Job ID: {job.job_id}\n"
                     f"Status: {job.current_step}\n"
-                    f"Queue Position: #{position} of {total}\n\n"
+                    f"Queue Position: #{position} of {total}\n"
+                    f"{location}\n\n"
                     "Type STATUS anytime to check live queue and charging status.\n"
                     "Type STOP to request stop charging.\n\n"
                     "A Juicer operator will serve requests first come, first serve.",
                 )
-
                 return {"ok": True}
 
             if button_id.startswith("check_status:"):
@@ -158,9 +215,10 @@ async def receive_webhook(
 
                 energy_kwh = get_energy_kwh(db, job.job_id)
                 position, total = get_queue_position(db, job)
+                location = format_job_location(db, job)
 
                 queue_line = ""
-                if job.current_step in ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]:
+                if job.current_step in ACTIVE_STEPS:
                     queue_line = f"Queue Position: #{position} of {total}\n"
 
                 send_whatsapp_text(
@@ -168,13 +226,12 @@ async def receive_webhook(
                     "Live Charging Status ⚡\n\n"
                     f"Status: {job.current_step}\n"
                     f"{queue_line}"
-                    f"Slot: {job.slot_id}\n"
+                    f"{location}\n"
                     f"Vehicle: {job.vehicle_number}\n"
                     f"Energy Used: {energy_kwh:.2f} kWh\n\n"
                     "Type STATUS anytime for live status.\n"
                     "Type STOP to request stop charging.",
                 )
-
                 return {"ok": True}
 
     if not phone or not text:
@@ -184,10 +241,11 @@ async def receive_webhook(
         send_whatsapp_text(
             phone,
             "Welcome to Juicer EV Charging ⚡\n\n"
-            "Scan a parking QR or send:\n"
-            "Charge_Request_Slot_<slot>\n\n"
+            "Please scan the QR placed at your parking slot.\n\n"
+            "Manual fallback format:\n"
+            "Charge_Request_Building_BUILDING_ID_Slot_SLOT_ID\n\n"
             "Example:\n"
-            "Charge_Request_Slot_S4",
+            "Charge_Request_Building_MANTRA_MOMENTS_Slot_I41",
         )
         return {"ok": True}
 
@@ -200,36 +258,35 @@ async def receive_webhook(
 
         position, total = get_queue_position(db, job)
         energy_kwh = get_energy_kwh(db, job.job_id)
+        location = format_job_location(db, job)
 
         if job.current_step == "INITIATED":
             message_text = (
                 "Your charging request is created ✅\n\n"
                 "Status: Payment Pending\n"
                 f"Job ID: {job.job_id}\n"
-                f"Slot: {job.slot_id}\n"
+                f"{location}\n"
                 f"Vehicle: {job.vehicle_number or 'Pending'}\n\n"
                 "Please complete payment to join the queue."
             )
-
-        elif job.current_step in ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]:
+        elif job.current_step in ACTIVE_STEPS:
             message_text = (
                 "Your Juicer request status ⚡\n\n"
                 f"Status: {job.current_step}\n"
                 f"Job ID: {job.job_id}\n"
                 f"Queue Position: #{position} of {total}\n"
-                f"Slot: {job.slot_id}\n"
+                f"{location}\n"
                 f"Vehicle: {job.vehicle_number or 'Pending'}\n"
                 f"Energy Used: {energy_kwh:.2f} kWh\n\n"
                 "Type STATUS anytime for live status.\n"
                 "Type STOP to request stop charging."
             )
-
         else:
             message_text = (
                 "Your charging session is completed ✅\n\n"
                 f"Status: {job.current_step}\n"
                 f"Job ID: {job.job_id}\n"
-                f"Slot: {job.slot_id}\n"
+                f"{location}\n"
                 f"Vehicle: {job.vehicle_number or 'Pending'}\n"
                 f"Energy Used: {energy_kwh:.2f} kWh"
             )
@@ -246,16 +303,9 @@ async def receive_webhook(
 
         if job.current_step == "CHARGING":
             job.current_step = "STOP_REQUESTED"
-
-            charge_status = (
-                db.query(ChargeStatus)
-                .filter(ChargeStatus.job_id == job.job_id)
-                .first()
-            )
-
+            charge_status = db.query(ChargeStatus).filter(ChargeStatus.job_id == job.job_id).first()
             if charge_status:
                 charge_status.is_charging_active = False
-
             db.commit()
             db.refresh(job)
 
@@ -265,102 +315,93 @@ async def receive_webhook(
                 "Charging will be stopped immediately by the Juicer operator.\n"
                 "Type STATUS anytime to check the latest session status.",
             )
-
         elif job.current_step == "STOP_REQUESTED":
             send_whatsapp_text(
                 phone,
-                "Stop request is already active 🛑\n\n"
-                "The Juicer operator has been notified.",
+                "Stop request is already active 🛑\n\nThe Juicer operator has been notified.",
             )
-
         else:
             send_whatsapp_text(
                 phone,
-                f"Stop is only available while charging.\n"
-                f"Current status: {job.current_step}",
+                f"Stop is only available while charging.\nCurrent status: {job.current_step}",
             )
-
         return {"ok": True}
 
-    if text.startswith("Charge_Request_Slot_"):
-        raw_slot_id = text.replace("Charge_Request_Slot_", "").strip()
-        
-        # Check if raw_slot_id is a secure qr_token
-        slot_record = db.query(ParkingSlot).filter(ParkingSlot.qr_token == raw_slot_id).first()
-        
-        if slot_record:
-            if not slot_record.is_active:
-                send_whatsapp_text(
-                    phone,
-                    "This parking slot QR code has been deactivated ❌\n\n"
-                    "Please contact the admin.",
-                )
-                return {"ok": True}
-            slot_id = slot_record.slot_id
-        else:
-            # Fallback for slot_id matching directly
-            slot_id = normalize_slot_id(raw_slot_id)
-            # Check if this slot exists in our DB
-            db_slot = db.query(ParkingSlot).filter(ParkingSlot.slot_id == slot_id).first()
-            if db_slot:
-                if not db_slot.is_active:
-                    send_whatsapp_text(
-                        phone,
-                        "This parking slot QR code has been deactivated ❌\n\n"
-                        "Please contact the admin.",
-                    )
-                    return {"ok": True}
-            elif not is_valid_slot_id(slot_id):
-                # If it doesn't exist in our DB and is not a valid format
-                send_whatsapp_text(
-                    phone,
-                    "Invalid slot ID or QR code format ❌\n\n"
-                    "Please scan a valid QR or send:\n"
-                    "Charge_Request_Slot_S4",
-                )
-                return {"ok": True}
+    resolved_slot, resolve_status = resolve_slot_from_message(db, text)
 
-        pending_slots[phone] = slot_id
+    if resolve_status == "INACTIVE":
+        send_whatsapp_text(
+            phone,
+            "This parking slot QR code has been deactivated ❌\n\nPlease contact the admin.",
+        )
+        return {"ok": True}
+
+    if resolve_status == "BUILDING_SLOT_NOT_FOUND":
+        send_whatsapp_text(
+            phone,
+            "Building/slot combination not found ❌\n\n"
+            "Please check the manual command format:\n"
+            "Charge_Request_Building_BUILDING_ID_Slot_SLOT_ID\n\n"
+            "Example:\n"
+            "Charge_Request_Building_MANTRA_MOMENTS_Slot_I41",
+        )
+        return {"ok": True}
+
+    if resolve_status == "LEGACY_SLOT_ONLY":
+        send_whatsapp_text(
+            phone,
+            "This slot command is incomplete because the same slot number may exist in multiple buildings.\n\n"
+            "Please scan the QR code placed at your parking slot or send:\n"
+            "Charge_Request_Building_BUILDING_ID_Slot_SLOT_ID\n\n"
+            "Example:\n"
+            "Charge_Request_Building_MANTRA_MOMENTS_Slot_I41",
+        )
+        return {"ok": True}
+
+    if resolved_slot:
+        pending_slots[phone] = slot_context(resolved_slot)
+        building_name = get_building_name(db, resolved_slot.building_id) or resolved_slot.building_id
 
         send_whatsapp_text(
             phone,
-            f"Slot {slot_id} received.\n\n"
+            f"Slot received ✅\n\n"
+            f"Building: {building_name}\n"
+            f"Slot: {resolved_slot.slot_id}\n\n"
             "Please send your vehicle number.\n"
             "Example: MH12AB1234",
         )
         return {"ok": True}
 
     if phone in pending_slots:
-        slot_id = pending_slots.pop(phone)
+        context = pending_slots.pop(phone)
         vehicle_number = normalize_vehicle_number(text)
 
         if not is_valid_vehicle_number(vehicle_number):
-            pending_slots[phone] = slot_id
-
+            pending_slots[phone] = context
             send_whatsapp_text(
                 phone,
                 "Invalid vehicle number format ❌\n\n"
                 "Please send a valid Indian vehicle number.\n"
                 "Example: MH12AB1234",
             )
-
             return {"ok": True}
 
         job = create_or_update_request(
             db,
             phone,
-            slot_id,
+            context["slot_id"],
             vehicle_number,
+            building_id=context.get("building_id"),
+            parking_slot_id=context.get("parking_slot_id"),
         )
 
         send_payment_button(phone, job.job_id)
-
         return {"ok": True}
 
     send_whatsapp_text(
         phone,
         "Sorry, I did not understand.\n\n"
-        "Send 'hi', 'status', 'stop', or scan a Juicer QR code.",
+        "Send 'hi', 'status', 'stop', scan a Juicer QR, or send:\n"
+        "Charge_Request_Building_BUILDING_ID_Slot_SLOT_ID",
     )
-
     return {"ok": True}

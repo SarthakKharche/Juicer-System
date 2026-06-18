@@ -17,7 +17,14 @@ class Queue(Base):
     __tablename__ = "queue"
 
     job_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+    # Legacy display field retained for existing code and old jobs.
     slot_id: Mapped[str] = mapped_column(String(96), nullable=False)
+
+    # New building-wise identifiers. These are nullable so old jobs continue to work.
+    building_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("buildings.building_id"), nullable=True)
+    parking_slot_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("parking_slots.parking_slot_id"), nullable=True)
+
     phone_number: Mapped[str] = mapped_column(String(24), nullable=False)
     vehicle_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     current_step: Mapped[str] = mapped_column(String(32), nullable=False, default="INITIATED")
