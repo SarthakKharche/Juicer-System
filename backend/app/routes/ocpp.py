@@ -51,15 +51,6 @@ def find_charging_job(db, charger_id: str) -> Queue | None:
 
     job = (
         db.query(Queue)
-        .filter(Queue.current_step == "CHARGING")
-        .order_by(Queue.updated_at.desc())
-        .first()
-    )
-    if job:
-        return job
-
-    return (
-        db.query(Queue)
         .filter(
             Queue.slot_id == charger_id,
             Queue.current_step.in_(["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]),
@@ -67,6 +58,16 @@ def find_charging_job(db, charger_id: str) -> Queue | None:
         .order_by(Queue.updated_at.desc())
         .first()
     )
+    if job:
+        return job
+
+    job = (
+        db.query(Queue)
+        .filter(Queue.current_step == "CHARGING")
+        .order_by(Queue.updated_at.desc())
+        .first()
+    )
+    return job
 
 
 def get_target_wh(db, job_id: str | None) -> float | None:
@@ -183,6 +184,12 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
                     is_charging_active=True,
                 )
                 db.add(status)
+            elif not status.job_id:
+                job = find_charging_job(db, charger_id)
+                if job:
+                    status.job_id = job.job_id
+                    if job.current_step in ["ASSIGNED", "ENROUTE"]:
+                        job.current_step = "CHARGING"
 
             if meter_wh is not None:
                 status.current_wh_delivered = meter_wh
