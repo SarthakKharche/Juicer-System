@@ -47,7 +47,10 @@ def serialize_job(job: Queue, db: Session | None = None):
         parking_slot = db.get(ParkingSlot, job.parking_slot_id)
 
     if db:
-        energy_kwh = get_job_energy_wh(job, db) / 1000
+        if job.current_step == "COMPLETED" and job.final_wh_delivered is not None:
+            energy_kwh = float(job.final_wh_delivered or 0) / 1000
+        else:
+            energy_kwh = get_job_energy_wh(job, db) / 1000
 
     return {
         "job_id": job.job_id,
@@ -216,6 +219,7 @@ def complete_job(job_id: str, db: Session = Depends(get_db)):
         charge_status.current_wh_delivered = energy_wh
         charge_status.is_charging_active = False
 
+    job.final_wh_delivered = energy_wh
     job.current_step = "COMPLETED"
 
     db.commit()

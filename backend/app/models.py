@@ -28,6 +28,7 @@ class Queue(Base):
     phone_number: Mapped[str] = mapped_column(String(24), nullable=False)
     vehicle_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     current_step: Mapped[str] = mapped_column(String(32), nullable=False, default="INITIATED")
+    final_wh_delivered: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
 
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(

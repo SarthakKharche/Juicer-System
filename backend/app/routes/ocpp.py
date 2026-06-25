@@ -243,6 +243,7 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
                 if status.job_id:
                     job = db.get(Queue, status.job_id)
                     if job and job.current_step in ["CHARGING", "STOP_REQUESTED"]:
+                        job.final_wh_delivered = float(status.current_wh_delivered or 0)
                         job.current_step = "COMPLETED"
                         completed_job = job
 
@@ -278,6 +279,7 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
                 if status.job_id:
                     job = db.get(Queue, status.job_id)
                     if job and job.current_step in ["CHARGING", "STOP_REQUESTED"]:
+                        job.final_wh_delivered = float(status.current_wh_delivered or 0)
                         job.current_step = "COMPLETED"
                         completed_job = job
 

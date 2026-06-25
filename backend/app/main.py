@@ -1,9 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from app.database import Base, engine
 from app.routes import whatsapp, customer, juicer, payment, charger, admin, ocpp
 
 Base.metadata.create_all(bind=engine)
+
+with engine.begin() as connection:
+    connection.execute(
+        text("ALTER TABLE queue ADD COLUMN IF NOT EXISTS final_wh_delivered NUMERIC(10, 2)")
+    )
 
 app = FastAPI(title="Juicer Backend API", version="1.0.0")
 
