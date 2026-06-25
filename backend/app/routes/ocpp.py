@@ -6,6 +6,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.database import SessionLocal
 from app.models import ChargeStatus, PaymentDetails, Queue
+from app.services.whatsapp_service import send_whatsapp_text
 from app.services.charger_service import (
     register_charger,
     unregister_charger,
@@ -96,6 +97,17 @@ def extract_meter_wh(payload: dict) -> float | None:
     return None
 
 
+def send_completion_message(job: Queue, energy_kwh: float):
+    send_whatsapp_text(
+        job.phone_number,
+        "Charging completed ✅\n\n"
+        f"Vehicle: {job.vehicle_number}\n"
+        f"Slot: {job.slot_id}\n"
+        f"Energy Delivered: {energy_kwh:.2f} kWh\n\n"
+        "Thank you for using Juicer ⚡",
+    )
+
+
 async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
     with SessionLocal() as db:
         if action == "BootNotification":
@@ -164,10 +176,22 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
             target_wh = get_target_wh(db, status.job_id)
             cutoff_required = target_wh is not None and float(status.current_wh_delivered or 0) >= target_wh
 
+            completed_job = None
             if cutoff_required:
                 status.is_charging_active = False
+                if status.job_id:
+                    job = db.get(Queue, status.job_id)
+                    if job and job.current_step in ["CHARGING", "STOP_REQUESTED"]:
+                        job.current_step = "COMPLETED"
+                        completed_job = job
 
             db.commit()
+
+            if completed_job:
+                send_completion_message(
+                    completed_job,
+                    float(status.current_wh_delivered or 0) / 1000,
+                )
 
             return {
                 "transactionId": transaction_id,
