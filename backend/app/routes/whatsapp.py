@@ -55,7 +55,12 @@ def get_queue_position(db: Session, job: Queue):
 
 
 def get_energy_kwh(db: Session, job_id: str) -> float:
+    job = db.get(Queue, job_id)
     charge_status = db.query(ChargeStatus).filter(ChargeStatus.job_id == job_id).first()
+
+    if not charge_status and job:
+        charge_status = db.get(ChargeStatus, job.slot_id)
+
     if not charge_status:
         return 0.0
     current_wh = float(charge_status.current_wh_delivered or 0)
