@@ -9,6 +9,7 @@ from app.models import ChargeStatus, PaymentDetails, Queue
 from app.services.whatsapp_service import send_whatsapp_text
 from app.services.charger_service import (
     register_charger,
+    send_remote_stop_transaction,
     unregister_charger,
 )
 
@@ -33,15 +34,6 @@ def call_result(unique_id: str, payload: dict):
 
 def call_error(unique_id: str, code: str, description: str):
     return [CALL_ERROR, unique_id, code, description, {}]
-
-
-def remote_stop_call(transaction_id: str):
-    return [
-        CALL,
-        str(uuid4()),
-        "RemoteStopTransaction",
-        {"transactionId": int(transaction_id)},
-    ]
 
 
 def find_charging_job(db, charger_id: str) -> Queue | None:
@@ -306,7 +298,7 @@ async def ocpp_socket(websocket: WebSocket, charger_id: str):
                 await websocket.send_text(json.dumps(call_result(unique_id, response_payload)))
                 transaction_id = response_payload.get("transactionId")
                 if response_payload.get("cutoffRequired") and transaction_id:
-                    await websocket.send_text(json.dumps(remote_stop_call(transaction_id)))
+                    await send_remote_stop_transaction(charger_id, transaction_id)
             except Exception as exc:
                 await websocket.send_text(
                     json.dumps(call_error(unique_id, "InternalError", str(exc)))

@@ -8,6 +8,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import Queue, ChargeStatus, Building, ParkingSlot, PaymentDetails
 from app.services.whatsapp_service import send_whatsapp_text, send_payment_button
+from app.services.charger_service import send_remote_stop_transaction
 from app.services.queue_service import create_or_update_request, get_latest_job_by_phone
 
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["WhatsApp"])
@@ -363,17 +364,40 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
 
         if job.current_step == "CHARGING":
             job.current_step = "STOP_REQUESTED"
-            charge_status = db.query(ChargeStatus).filter(ChargeStatus.job_id == job.job_id).first()
+            charge_status = db.get(ChargeStatus, job.slot_id)
+            if not charge_status:
+                charge_status = db.query(ChargeStatus).filter(ChargeStatus.job_id == job.job_id).first()
             if charge_status:
                 charge_status.is_charging_active = False
+            transaction_id = None
+            if charge_status:
+                from app.routes.ocpp import charger_transactions
+
+                transaction_id = charger_transactions.get(charge_status.active_charger_id)
             db.commit()
             db.refresh(job)
 
+            remote_stop_sent = False
+            if charge_status and transaction_id:
+                remote_stop_sent = await send_remote_stop_transaction(
+                    charge_status.active_charger_id,
+                    transaction_id,
+                )
+
+            stop_detail = (
+                "Charging is being stopped now.\n"
+                if remote_stop_sent
+                else "Charging will be stopped by the Juicer operator.\n"
+            )
+            stop_message = (
+                f"Charging stop request received {STOP_SIGN}\n\n"
+                f"{stop_detail}"
+                "Type STATUS anytime to check the latest session status."
+            )
+
             send_whatsapp_text(
                 phone,
-                f"Charging stop request received {STOP_SIGN}\n\n"
-                "Charging will be stopped immediately by the Juicer operator.\n"
-                "Type STATUS anytime to check the latest session status.",
+                stop_message,
             )
         elif job.current_step == "STOP_REQUESTED":
             send_whatsapp_text(
