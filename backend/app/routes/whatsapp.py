@@ -60,14 +60,24 @@ def get_queue_position(db: Session, job: Queue):
 
 def get_energy_kwh(db: Session, job_id: str) -> float:
     job = db.get(Queue, job_id)
-    charge_status = db.query(ChargeStatus).filter(ChargeStatus.job_id == job_id).first()
+    charge_status_rows = []
 
-    if not charge_status and job:
-        charge_status = db.get(ChargeStatus, job.slot_id)
+    if job:
+        slot_status = db.get(ChargeStatus, job.slot_id)
+        if slot_status:
+            charge_status_rows.append(slot_status)
 
-    if not charge_status:
+    charge_status_rows.extend(
+        db.query(ChargeStatus)
+        .filter(ChargeStatus.job_id == job_id)
+        .order_by(ChargeStatus.last_pulse_at.desc())
+        .all()
+    )
+
+    if not charge_status_rows:
         return 0.0
-    current_wh = float(charge_status.current_wh_delivered or 0)
+
+    current_wh = max(float(status.current_wh_delivered or 0) for status in charge_status_rows)
     return current_wh / 1000
 
 
