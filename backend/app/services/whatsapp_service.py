@@ -1,6 +1,10 @@
 import requests
 from app.config import settings
 
+CHECK = "\u2705"
+LIGHTNING = "\u26a1"
+RUPEE = "\u20b9"
+
 
 def send_whatsapp_text(to: str, text: str) -> dict:
     payload = {
@@ -22,9 +26,9 @@ def send_payment_button(to: str, job_id: str) -> dict:
             "type": "button",
             "body": {
                 "text": (
-                    "Charging request created\n\n"
+                    f"Charging request created {CHECK}\n\n"
                     f"Job ID: {job_id}\n\n"
-                    "Amount: Rs 100\n"
+                    f"Amount: {RUPEE}100\n"
                     "Tap below to simulate payment."
                 )
             },
@@ -34,7 +38,7 @@ def send_payment_button(to: str, job_id: str) -> dict:
                         "type": "reply",
                         "reply": {
                             "id": f"fake_pay:{job_id}",
-                            "title": "Pay Rs 100",
+                            "title": f"Pay {RUPEE}100",
                         },
                     }
                 ]
@@ -54,12 +58,12 @@ def send_status_button(to: str, job_id: str) -> dict:
             "type": "button",
             "body": {
                 "text": (
-                    "Charging started\n\n"
+                    f"Charging started {LIGHTNING}\n\n"
                     f"Job ID: {job_id}\n\n"
                     "You can:\n"
-                    "- Tap Check Status\n"
-                    "- Type STATUS anytime\n"
-                    "- Type STOP to request stop charging"
+                    "\u2022 Tap Check Status\n"
+                    "\u2022 Type STATUS anytime\n"
+                    "\u2022 Type STOP to request stop charging"
                 )
             },
             "action": {

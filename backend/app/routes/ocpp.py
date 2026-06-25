@@ -17,6 +17,8 @@ router = APIRouter(prefix="/ocpp", tags=["OCPP"])
 CALL = 2
 CALL_RESULT = 3
 CALL_ERROR = 4
+CHECK = "\u2705"
+LIGHTNING = "\u26a1"
 
 charger_transactions: dict[str, str] = {}
 
@@ -141,11 +143,11 @@ def extract_meter_wh(payload: dict) -> float | None:
 def send_completion_message(job: Queue, energy_kwh: float):
     send_whatsapp_text(
         job.phone_number,
-        "Charging completed\n\n"
+        f"Charging completed {CHECK}\n\n"
         f"Vehicle: {job.vehicle_number}\n"
         f"Slot: {job.slot_id}\n"
         f"Energy Delivered: {energy_kwh:.2f} kWh\n\n"
-        "Thank you for using Juicer",
+        f"Thank you for using Juicer {LIGHTNING}",
     )
 
 

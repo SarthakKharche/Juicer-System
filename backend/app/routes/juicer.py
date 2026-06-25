@@ -12,6 +12,8 @@ from app.services.whatsapp_service import (
 router = APIRouter(prefix="/juicer", tags=["Juicer"])
 
 ACTIVE_STEPS = ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]
+CHECK = "\u2705"
+LIGHTNING = "\u26a1"
 
 
 def serialize_job(job: Queue, db: Session | None = None):
@@ -193,11 +195,11 @@ def complete_job(job_id: str, db: Session = Depends(get_db)):
 
     send_whatsapp_text(
         job.phone_number,
-        "Charging completed\n\n"
+        f"Charging completed {CHECK}\n\n"
         f"Vehicle: {job.vehicle_number}\n"
         f"Slot: {job.slot_id}\n"
         f"Energy Delivered: {energy_kwh:.2f} kWh\n\n"
-        "Thank you for using Juicer",
+        f"Thank you for using Juicer {LIGHTNING}",
     )
 
     return {
