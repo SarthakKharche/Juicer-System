@@ -208,7 +208,7 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
 
                 send_whatsapp_text(
                     phone,
-                    "Payment successful ✅\n\n"
+                    "Payment successful\n\n"
                     f"Job ID: {job.job_id}\n"
                     f"Status: {job.current_step}\n"
                     f"Queue Position: #{position} of {total}\n"
@@ -237,7 +237,7 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
 
                 send_whatsapp_text(
                     phone,
-                    "Live Charging Status ⚡\n\n"
+                    "Live Charging Status\n\n"
                     f"Status: {job.current_step}\n"
                     f"{queue_line}"
                     f"{location}\n"
@@ -254,7 +254,7 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
     if command in ["hi", "hello", "start"]:
         send_whatsapp_text(
             phone,
-            "Welcome to Juicer EV Charging ⚡\n\n"
+            "Welcome to Juicer EV Charging\n\n"
             "Please scan the QR placed at your parking slot.\n\n"
             "Manual fallback format:\n"
             "Charge_Request_Building_BUILDING_ID_Slot_SLOT_ID\n\n"
@@ -276,7 +276,7 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
 
         if job.current_step == "INITIATED":
             message_text = (
-                "Your charging request is created ✅\n\n"
+                "Your charging request is created\n\n"
                 "Status: Payment Pending\n"
                 f"Job ID: {job.job_id}\n"
                 f"{location}\n"
@@ -285,7 +285,7 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
             )
         elif job.current_step in ACTIVE_STEPS:
             message_text = (
-                "Your Juicer request status ⚡\n\n"
+                "Your Juicer request status\n\n"
                 f"Status: {job.current_step}\n"
                 f"Job ID: {job.job_id}\n"
                 f"Queue Position: #{position} of {total}\n"
@@ -297,7 +297,7 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
             )
         else:
             message_text = (
-                "Your charging session is completed ✅\n\n"
+                "Your charging session is completed\n\n"
                 f"Status: {job.current_step}\n"
                 f"Job ID: {job.job_id}\n"
                 f"{location}\n"
@@ -325,14 +325,14 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
 
             send_whatsapp_text(
                 phone,
-                "Charging stop request received 🛑\n\n"
+                "Charging stop request received\n\n"
                 "Charging will be stopped immediately by the Juicer operator.\n"
                 "Type STATUS anytime to check the latest session status.",
             )
         elif job.current_step == "STOP_REQUESTED":
             send_whatsapp_text(
                 phone,
-                "Stop request is already active 🛑\n\nThe Juicer operator has been notified.",
+                "Stop request is already active\n\nThe Juicer operator has been notified.",
             )
         else:
             send_whatsapp_text(
@@ -346,14 +346,14 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
     if resolve_status == "INACTIVE":
         send_whatsapp_text(
             phone,
-            "This parking slot QR code has been deactivated ❌\n\nPlease contact the admin.",
+            "This parking slot QR code has been deactivated\n\nPlease contact the admin.",
         )
         return {"ok": True}
 
     if resolve_status == "BUILDING_SLOT_NOT_FOUND":
         send_whatsapp_text(
             phone,
-            "Building/slot combination not found ❌\n\n"
+            "Building/slot combination not found\n\n"
             "Please check the manual command format:\n"
             "Charge_Request_Building_BUILDING_ID_Slot_SLOT_ID\n\n"
             "Example:\n"
@@ -378,7 +378,7 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
 
         send_whatsapp_text(
             phone,
-            f"Slot received ✅\n\n"
+            f"Slot received\n\n"
             f"Building: {building_name}\n"
             f"Slot: {resolved_slot.slot_id}\n\n"
             "Please send your vehicle number.\n"
@@ -394,7 +394,7 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
             pending_slots[phone] = context
             send_whatsapp_text(
                 phone,
-                "Invalid vehicle number format ❌\n\n"
+                "Invalid vehicle number format\n\n"
                 "Please send a valid Indian vehicle number.\n"
                 "Example: MH12AB1234",
             )

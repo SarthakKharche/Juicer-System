@@ -22,9 +22,9 @@ def send_payment_button(to: str, job_id: str) -> dict:
             "type": "button",
             "body": {
                 "text": (
-                    "Charging request created ✅\n\n"
+                    "Charging request created\n\n"
                     f"Job ID: {job_id}\n\n"
-                    "Amount: ₹100\n"
+                    "Amount: Rs 100\n"
                     "Tap below to simulate payment."
                 )
             },
@@ -34,7 +34,7 @@ def send_payment_button(to: str, job_id: str) -> dict:
                         "type": "reply",
                         "reply": {
                             "id": f"fake_pay:{job_id}",
-                            "title": "Pay ₹100",
+                            "title": "Pay Rs 100",
                         },
                     }
                 ]
@@ -54,12 +54,12 @@ def send_status_button(to: str, job_id: str) -> dict:
             "type": "button",
             "body": {
                 "text": (
-                    "Charging started ⚡\n\n"
+                    "Charging started\n\n"
                     f"Job ID: {job_id}\n\n"
                     "You can:\n"
-                    "• Tap Check Status\n"
-                    "• Type STATUS anytime\n"
-                    "• Type STOP to request stop charging"
+                    "- Tap Check Status\n"
+                    "- Type STATUS anytime\n"
+                    "- Type STOP to request stop charging"
                 )
             },
             "action": {

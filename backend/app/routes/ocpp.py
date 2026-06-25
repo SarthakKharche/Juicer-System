@@ -141,11 +141,11 @@ def extract_meter_wh(payload: dict) -> float | None:
 def send_completion_message(job: Queue, energy_kwh: float):
     send_whatsapp_text(
         job.phone_number,
-        "Charging completed ✅\n\n"
+        "Charging completed\n\n"
         f"Vehicle: {job.vehicle_number}\n"
         f"Slot: {job.slot_id}\n"
         f"Energy Delivered: {energy_kwh:.2f} kWh\n\n"
-        "Thank you for using Juicer ⚡",
+        "Thank you for using Juicer",
     )
 
 

@@ -193,11 +193,11 @@ def complete_job(job_id: str, db: Session = Depends(get_db)):
 
     send_whatsapp_text(
         job.phone_number,
-        "Charging completed ✅\n\n"
+        "Charging completed\n\n"
         f"Vehicle: {job.vehicle_number}\n"
         f"Slot: {job.slot_id}\n"
         f"Energy Delivered: {energy_kwh:.2f} kWh\n\n"
-        "Thank you for using Juicer ⚡",
+        "Thank you for using Juicer",
     )
 
     return {
