@@ -1,11 +1,12 @@
 import re
+from uuid import uuid4
 
 from fastapi import APIRouter, Request, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import Queue, ChargeStatus, Building, ParkingSlot
+from app.models import Queue, ChargeStatus, Building, ParkingSlot, PaymentDetails
 from app.services.whatsapp_service import send_whatsapp_text, send_payment_button
 from app.services.queue_service import create_or_update_request, get_latest_job_by_phone
 
@@ -185,6 +186,14 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
                     )
                     return {"ok": True}
 
+                payment = PaymentDetails(
+                    transaction_id=f"WA-FAKE-{uuid4()}",
+                    job_id=job_id,
+                    payment_status="SUCCESS",
+                    amount_paid=100.00,
+                    target_kwh_limit=5.00,
+                )
+                db.add(payment)
                 job.current_step = "ASSIGNED"
                 db.commit()
                 db.refresh(job)

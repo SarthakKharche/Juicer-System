@@ -70,6 +70,34 @@ def find_charging_job(db, charger_id: str) -> Queue | None:
     return job
 
 
+def find_active_slot_job(db, charger_id: str) -> Queue | None:
+    return (
+        db.query(Queue)
+        .filter(
+            Queue.slot_id == charger_id,
+            Queue.current_step.in_(["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]),
+        )
+        .order_by(Queue.updated_at.desc())
+        .first()
+    )
+
+
+def attach_status_to_current_job(db, charger_id: str, status: ChargeStatus):
+    slot_job = find_active_slot_job(db, charger_id)
+    if not slot_job:
+        return None
+
+    current_job = db.get(Queue, status.job_id) if status.job_id else None
+    if not current_job or current_job.current_step not in ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]:
+        status.job_id = slot_job.job_id
+        current_job = slot_job
+
+    if current_job.current_step in ["ASSIGNED", "ENROUTE"]:
+        current_job.current_step = "CHARGING"
+
+    return current_job
+
+
 def get_target_wh(db, job_id: str | None) -> float | None:
     if not job_id:
         return None
@@ -161,6 +189,8 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
                 status.current_wh_delivered = float(payload.get("meterStart") or 0)
                 status.is_charging_active = True
 
+            attach_status_to_current_job(db, charger_id, status)
+
             db.commit()
 
             return {
@@ -191,6 +221,8 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
                     if job.current_step in ["ASSIGNED", "ENROUTE"]:
                         job.current_step = "CHARGING"
 
+            linked_job = attach_status_to_current_job(db, charger_id, status)
+
             if meter_wh is not None:
                 status.current_wh_delivered = meter_wh
             status.is_charging_active = True
@@ -220,6 +252,8 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
                 "cutoffRequired": cutoff_required,
                 "currentWhDelivered": float(status.current_wh_delivered or 0),
                 "targetWhLimit": target_wh,
+                "linkedJobId": status.job_id,
+                "linkedJobStatus": linked_job.current_step if linked_job else None,
             }
 
         if action == "StopTransaction":
