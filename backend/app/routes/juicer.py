@@ -19,12 +19,30 @@ LIGHTNING = "\u26a1"
 def serialize_job(job: Queue, db: Session | None = None):
     building = None
     parking_slot = None
+    energy_kwh = 0.0
 
     if db and getattr(job, "building_id", None):
         building = db.get(Building, job.building_id)
 
     if db and getattr(job, "parking_slot_id", None):
         parking_slot = db.get(ParkingSlot, job.parking_slot_id)
+
+    if db:
+        charge_status_rows = []
+        slot_status = db.get(ChargeStatus, job.slot_id)
+        if slot_status:
+            charge_status_rows.append(slot_status)
+
+        charge_status_rows.extend(
+            db.query(ChargeStatus)
+            .filter(ChargeStatus.job_id == job.job_id)
+            .order_by(ChargeStatus.last_pulse_at.desc())
+            .all()
+        )
+
+        if charge_status_rows:
+            energy_wh = max(float(status.current_wh_delivered or 0) for status in charge_status_rows)
+            energy_kwh = energy_wh / 1000
 
     return {
         "job_id": job.job_id,
@@ -38,6 +56,8 @@ def serialize_job(job: Queue, db: Session | None = None):
         "phone_number": job.phone_number,
         "vehicle_number": job.vehicle_number,
         "current_step": job.current_step,
+        "energy_kwh": energy_kwh,
+        "cost": energy_kwh * 15.0,
         "created_at": job.created_at.isoformat() if job.created_at else None,
         "updated_at": job.updated_at.isoformat() if job.updated_at else None,
     }

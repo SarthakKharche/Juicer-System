@@ -107,9 +107,9 @@ function App() {
 
   useEffect(() => {
     refreshAll();
-    const interval = setInterval(loadData, 10000);
+    const interval = setInterval(loadData, activeTab === "sessions" ? 3000 : 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     if (selectedBuildingId) {
@@ -963,17 +963,8 @@ function App() {
                           filteredSessions.map((job) => {
                             const isJobActive = ACTIVE_STEPS.includes(job.current_step);
                             
-                            // Deterministic mock calculations based on timestamps
-                            let energy = 15.0;
-                            if (job.current_step === "COMPLETED") {
-                              const durationHrs = (new Date(job.updated_at) - new Date(job.created_at)) / 3600000;
-                              energy = isNaN(durationHrs) || durationHrs <= 0 ? 12.5 : Math.min(60, Math.max(1.5, durationHrs * 18.5));
-                            } else if (isJobActive) {
-                              const durationHrs = (new Date() - new Date(job.created_at)) / 3600000;
-                              energy = isNaN(durationHrs) || durationHrs <= 0 ? 0.8 : Math.min(45, durationHrs * 18.5);
-                            }
-                            
-                            const cost = energy * 15.0; // ₹15 per kWh
+                            const energy = Number(job.energy_kwh || 0);
+                            const cost = Number(job.cost || energy * 15.0);
 
                             return (
                               <div className="table-row sessions-grid" key={job.job_id}>
