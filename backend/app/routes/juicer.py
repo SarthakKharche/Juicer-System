@@ -16,11 +16,29 @@ CHECK = "\u2705"
 LIGHTNING = "\u26a1"
 
 
+def get_job_energy_wh(job: Queue, db: Session) -> float:
+    charge_status_rows = []
+    slot_status = db.get(ChargeStatus, job.slot_id)
+    if slot_status and slot_status.job_id == job.job_id:
+        charge_status_rows.append(slot_status)
+
+    charge_status_rows.extend(
+        db.query(ChargeStatus)
+        .filter(ChargeStatus.job_id == job.job_id)
+        .order_by(ChargeStatus.last_pulse_at.desc())
+        .all()
+    )
+
+    if not charge_status_rows:
+        return 0.0
+
+    return max(float(status.current_wh_delivered or 0) for status in charge_status_rows)
+
+
 def serialize_job(job: Queue, db: Session | None = None):
     building = None
     parking_slot = None
     energy_kwh = 0.0
-    active_steps = ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]
 
     if db and getattr(job, "building_id", None):
         building = db.get(Building, job.building_id)
@@ -29,21 +47,7 @@ def serialize_job(job: Queue, db: Session | None = None):
         parking_slot = db.get(ParkingSlot, job.parking_slot_id)
 
     if db:
-        charge_status_rows = []
-        slot_status = db.get(ChargeStatus, job.slot_id) if job.current_step in active_steps else None
-        if slot_status and slot_status.job_id == job.job_id:
-            charge_status_rows.append(slot_status)
-
-        charge_status_rows.extend(
-            db.query(ChargeStatus)
-            .filter(ChargeStatus.job_id == job.job_id)
-            .order_by(ChargeStatus.last_pulse_at.desc())
-            .all()
-        )
-
-        if charge_status_rows:
-            energy_wh = max(float(status.current_wh_delivered or 0) for status in charge_status_rows)
-            energy_kwh = energy_wh / 1000
+        energy_kwh = get_job_energy_wh(job, db) / 1000
 
     return {
         "job_id": job.job_id,
@@ -202,11 +206,14 @@ def complete_job(job_id: str, db: Session = Depends(get_db)):
         .filter(ChargeStatus.job_id == job.job_id)
         .first()
     )
+    if not charge_status:
+        charge_status = db.get(ChargeStatus, job.slot_id)
 
-    energy_kwh = 0.0
+    energy_wh = get_job_energy_wh(job, db)
+    energy_kwh = energy_wh / 1000
 
     if charge_status:
-        energy_kwh = float(charge_status.current_wh_delivered or 0) / 1000
+        charge_status.current_wh_delivered = energy_wh
         charge_status.is_charging_active = False
 
     job.current_step = "COMPLETED"
