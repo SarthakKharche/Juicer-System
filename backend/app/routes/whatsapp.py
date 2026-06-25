@@ -8,7 +8,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import Queue, ChargeStatus, Building, ParkingSlot, PaymentDetails
 from app.services.whatsapp_service import send_whatsapp_text, send_payment_button
-from app.services.charger_service import send_remote_stop_transaction
+from app.services.charger_service import get_active_transaction, send_remote_stop_transaction
 from app.services.queue_service import create_or_update_request, get_latest_job_by_phone
 
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["WhatsApp"])
@@ -228,6 +228,8 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
 
     button_id = get_reply_button_id(message)
     normalized_button_id = normalize_command(button_id)
+    if button_id:
+        print("WhatsApp button id:", button_id)
 
     if button_id:
         if button_id.startswith("fake_pay:") or normalized_button_id.startswith("pay"):
@@ -369,18 +371,20 @@ async def receive_webhook(request: Request, db: Session = Depends(get_db)):
                 charge_status = db.query(ChargeStatus).filter(ChargeStatus.job_id == job.job_id).first()
             if charge_status:
                 charge_status.is_charging_active = False
-            transaction_id = None
+            charger_id = job.slot_id
             if charge_status:
-                from app.routes.ocpp import charger_transactions
-
-                transaction_id = charger_transactions.get(charge_status.active_charger_id)
+                charger_id = charge_status.active_charger_id
+            transaction_id = get_active_transaction(charger_id)
+            print(
+                f"Stop requested for job {job.job_id}, charger {charger_id}, transaction {transaction_id}"
+            )
             db.commit()
             db.refresh(job)
 
             remote_stop_sent = False
-            if charge_status and transaction_id:
+            if transaction_id:
                 remote_stop_sent = await send_remote_stop_transaction(
-                    charge_status.active_charger_id,
+                    charger_id,
                     transaction_id,
                 )
 

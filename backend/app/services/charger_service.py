@@ -2,6 +2,7 @@ import json
 from uuid import uuid4
 
 active_charger_sockets = {}
+active_charger_transactions = {}
 
 async def send_cutoff_command(charger_id: str):
     websocket = active_charger_sockets.get(charger_id)
@@ -24,8 +25,22 @@ async def send_remote_stop_transaction(charger_id: str, transaction_id: str | in
         "RemoteStopTransaction",
         {"transactionId": int(transaction_id)},
     ]
+    print(f"Sending RemoteStopTransaction to {charger_id} for transaction {transaction_id}")
     await websocket.send_text(json.dumps(message))
     return True
+
+
+def set_active_transaction(charger_id: str, transaction_id: str | int):
+    active_charger_transactions[charger_id] = str(transaction_id)
+
+
+def get_active_transaction(charger_id: str):
+    return active_charger_transactions.get(charger_id)
+
+
+def clear_active_transaction(charger_id: str):
+    active_charger_transactions.pop(charger_id, None)
+
 
 async def register_charger(charger_id: str, websocket):
     active_charger_sockets[charger_id] = websocket

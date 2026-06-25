@@ -8,8 +8,11 @@ from app.database import SessionLocal
 from app.models import ChargeStatus, PaymentDetails, Queue
 from app.services.whatsapp_service import send_whatsapp_text
 from app.services.charger_service import (
+    clear_active_transaction,
+    get_active_transaction,
     register_charger,
     send_remote_stop_transaction,
+    set_active_transaction,
     unregister_charger,
 )
 
@@ -20,9 +23,6 @@ CALL_RESULT = 3
 CALL_ERROR = 4
 CHECK = "\u2705"
 LIGHTNING = "\u26a1"
-
-charger_transactions: dict[str, str] = {}
-
 
 def utc_now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -164,7 +164,7 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
         if action == "StartTransaction":
             job = find_charging_job(db, charger_id)
             transaction_id = abs(hash(f"{charger_id}:{uuid4()}")) % 2147483647
-            charger_transactions[charger_id] = str(transaction_id)
+            set_active_transaction(charger_id, transaction_id)
 
             if job and job.current_step in ["ASSIGNED", "ENROUTE"]:
                 job.current_step = "CHARGING"
@@ -195,7 +195,7 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
         if action == "MeterValues":
             meter_wh = extract_meter_wh(payload)
             transaction_id = str(
-                payload.get("transactionId") or charger_transactions.get(charger_id) or ""
+                payload.get("transactionId") or get_active_transaction(charger_id) or ""
             )
 
             status = db.get(ChargeStatus, charger_id)
@@ -252,14 +252,28 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
 
         if action == "StopTransaction":
             status = db.get(ChargeStatus, charger_id)
+            completed_job = None
             if status:
                 status.is_charging_active = False
                 meter_stop = payload.get("meterStop")
                 if meter_stop is not None:
                     status.current_wh_delivered = float(meter_stop)
+
+                if status.job_id:
+                    job = db.get(Queue, status.job_id)
+                    if job and job.current_step in ["CHARGING", "STOP_REQUESTED"]:
+                        job.current_step = "COMPLETED"
+                        completed_job = job
+
                 db.commit()
 
-            charger_transactions.pop(charger_id, None)
+            if completed_job and status:
+                send_completion_message(
+                    completed_job,
+                    float(status.current_wh_delivered or 0) / 1000,
+                )
+
+            clear_active_transaction(charger_id)
             return {"idTagInfo": {"status": "Accepted"}}
 
         return {}
