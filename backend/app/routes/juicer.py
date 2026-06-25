@@ -20,6 +20,7 @@ def serialize_job(job: Queue, db: Session | None = None):
     building = None
     parking_slot = None
     energy_kwh = 0.0
+    active_steps = ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]
 
     if db and getattr(job, "building_id", None):
         building = db.get(Building, job.building_id)
@@ -29,8 +30,8 @@ def serialize_job(job: Queue, db: Session | None = None):
 
     if db:
         charge_status_rows = []
-        slot_status = db.get(ChargeStatus, job.slot_id)
-        if slot_status:
+        slot_status = db.get(ChargeStatus, job.slot_id) if job.current_step in active_steps else None
+        if slot_status and slot_status.job_id == job.job_id:
             charge_status_rows.append(slot_status)
 
         charge_status_rows.extend(

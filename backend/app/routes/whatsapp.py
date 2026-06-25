@@ -65,7 +65,7 @@ def get_energy_kwh(db: Session, job_id: str) -> float:
 
     if job:
         slot_status = db.get(ChargeStatus, job.slot_id)
-        if slot_status:
+        if slot_status and slot_status.job_id == job.job_id:
             charge_status_rows.append(slot_status)
 
     charge_status_rows.extend(
