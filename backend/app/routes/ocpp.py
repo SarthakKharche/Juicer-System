@@ -49,9 +49,21 @@ def find_charging_job(db, charger_id: str) -> Queue | None:
         if job:
             return job
 
-    return (
+    job = (
         db.query(Queue)
         .filter(Queue.current_step == "CHARGING")
+        .order_by(Queue.updated_at.desc())
+        .first()
+    )
+    if job:
+        return job
+
+    return (
+        db.query(Queue)
+        .filter(
+            Queue.slot_id == charger_id,
+            Queue.current_step.in_(["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]),
+        )
         .order_by(Queue.updated_at.desc())
         .first()
     )
@@ -130,6 +142,9 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
             job = find_charging_job(db, charger_id)
             transaction_id = abs(hash(f"{charger_id}:{uuid4()}")) % 2147483647
             charger_transactions[charger_id] = str(transaction_id)
+
+            if job and job.current_step in ["ASSIGNED", "ENROUTE"]:
+                job.current_step = "CHARGING"
 
             status = db.get(ChargeStatus, charger_id)
             if not status:
