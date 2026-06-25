@@ -217,6 +217,19 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
 
             linked_job = attach_status_to_current_job(db, charger_id, status)
 
+            if linked_job and linked_job.current_step == "COMPLETED":
+                db.commit()
+                return {
+                    "transactionId": transaction_id,
+                    "cutoffRequired": False,
+                    "currentWhDelivered": float(status.current_wh_delivered or 0),
+                    "targetWhLimit": get_target_wh(db, status.job_id),
+                    "linkedJobId": status.job_id,
+                    "linkedJobStatus": linked_job.current_step,
+                    "ignored": True,
+                    "reason": "Session already completed",
+                }
+
             if meter_wh is not None:
                 status.current_wh_delivered = meter_wh
             status.is_charging_active = True
@@ -257,7 +270,10 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
                 status.is_charging_active = False
                 meter_stop = payload.get("meterStop")
                 if meter_stop is not None:
-                    status.current_wh_delivered = float(meter_stop)
+                    status.current_wh_delivered = max(
+                        float(status.current_wh_delivered or 0),
+                        float(meter_stop),
+                    )
 
                 if status.job_id:
                     job = db.get(Queue, status.job_id)
