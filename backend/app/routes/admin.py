@@ -64,8 +64,19 @@ def make_qr_text(qr_token: str) -> str:
 
 
 def make_qr_link(qr_token: str) -> str:
+    # Primary QR flow remains token-based so users cannot change the slot by editing text.
     qr_text = make_qr_text(qr_token)
     return f"https://wa.me/{settings.WHATSAPP_BOT_NUMBER}?text={quote(qr_text)}"
+
+
+def make_manual_text(building_id: str, slot_id: str) -> str:
+    # Manual fallback format requested for cases where QR cannot be scanned.
+    return f"Charge_Request_Building_{building_id}_Slot_{slot_id}"
+
+
+def make_manual_link(building_id: str, slot_id: str) -> str:
+    manual_text = make_manual_text(building_id, slot_id)
+    return f"https://wa.me/{settings.WHATSAPP_BOT_NUMBER}?text={quote(manual_text)}"
 
 
 def serialize_building(building: Building):
@@ -92,6 +103,8 @@ def serialize_slot(slot: ParkingSlot, building: Building | None = None):
         "qr_token": slot.qr_token,
         "qr_text": make_qr_text(slot.qr_token),
         "qr_link": make_qr_link(slot.qr_token),
+        "manual_text": make_manual_text(slot.building_id, slot.slot_id),
+        "manual_link": make_manual_link(slot.building_id, slot.slot_id),
         "is_active": slot.is_active,
         "created_at": slot.created_at.isoformat() if slot.created_at else None,
     }

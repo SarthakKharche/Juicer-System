@@ -8,6 +8,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   async function loadJobs() {
     try {
@@ -26,6 +28,7 @@ function App() {
     try {
       setActionLoading(`${jobId}-${action}`);
       setError("");
+      setSuccess("");
 
       const body =
         action === "plugged-in"
@@ -35,6 +38,7 @@ function App() {
           : {};
 
       await api.post(`/juicer/jobs/${jobId}/${action}`, body);
+      setSuccess(`Job status updated successfully to ${action.toUpperCase()}!`);
       await loadJobs();
     } catch (err) {
       console.error(err);
@@ -50,6 +54,20 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => setSuccess(""), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(""), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   const queueJobs = useMemo(() => {
     return jobs
       .filter((job) =>
@@ -64,21 +82,6 @@ function App() {
       );
   }, [jobs]);
 
-  const stats = useMemo(() => {
-    return {
-      total: queueJobs.length,
-      assigned: queueJobs.filter((job) => job.current_step === "ASSIGNED")
-        .length,
-      enroute: queueJobs.filter((job) => job.current_step === "ENROUTE")
-        .length,
-      charging: queueJobs.filter((job) => job.current_step === "CHARGING")
-        .length,
-      stopRequested: queueJobs.filter(
-        (job) => job.current_step === "STOP_REQUESTED"
-      ).length,
-    };
-  }, [queueJobs]);
-
   const hasActiveJob = queueJobs.some((job) =>
     ["ENROUTE", "CHARGING", "STOP_REQUESTED"].includes(job.current_step)
   );
@@ -88,87 +91,104 @@ function App() {
   );
 
   return (
-    <main className="container">
-      <header className="header">
-        <div>
-          <p className="eyebrow">Juicer Operations</p>
-          <h1>Juicer Queue Dashboard</h1>
-          <p className="subtitle">
-            Strict first come, first serve queue. Only the top job can be
-            accepted.
-          </p>
-        </div>
+    <div className="app-container">
+      <div className="toast-container">
+        {success && (
+          <div className="toast success-toast">
+            <span className="toast-icon">✅</span>
+            <div className="toast-content">{success}</div>
+            <button className="toast-close" onClick={() => setSuccess("")}>×</button>
+          </div>
+        )}
+        {error && (
+          <div className="toast error-toast">
+            <span className="toast-icon">❌</span>
+            <div className="toast-content">{error}</div>
+            <button className="toast-close" onClick={() => setError("")}>×</button>
+          </div>
+        )}
+      </div>
 
-        <button className="refresh-button" onClick={loadJobs}>
-          Refresh
-        </button>
+      <header className="topbar">
+        <div className="logo-group">
+          <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle Menu">
+            <span className="hamburger-bar"></span>
+            <span className="hamburger-bar"></span>
+            <span className="hamburger-bar"></span>
+          </button>
+          <span className="logo-icon">⚡</span>
+          <span className="logo-text">Juicer Operator Dashboard</span>
+        </div>
+        <div className="topbar-actions">
+          <button className="refresh-btn" onClick={loadJobs}>
+            Refresh
+          </button>
+        </div>
       </header>
 
-      {error && <div className="error-box">{error}</div>}
-
-      <section className="stats-grid">
-        <div className="stat-card">
-          <span>Active Queue</span>
-          <strong>{stats.total}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Assigned</span>
-          <strong>{stats.assigned}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Enroute</span>
-          <strong>{stats.enroute}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Charging</span>
-          <strong>{stats.charging}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Stop Requested</span>
-          <strong>{stats.stopRequested}</strong>
-        </div>
-      </section>
-
-      {loading ? (
-        <p className="empty-text">Loading jobs...</p>
-      ) : (
-        <section className="single-queue-layout">
-          <div className="column queue-column">
-            <div className="column-header">
-              <h2>Queue</h2>
-              <span>{queueJobs.length}</span>
-            </div>
-
-            <p className="column-description">
-              New requests join the end. The next job becomes available only
-              after the active job is completed.
-            </p>
-
-            <div className="column-body">
-              {queueJobs.length === 0 ? (
-                <p className="empty-column">No active queue jobs</p>
-              ) : (
-                queueJobs.map((job, index) => (
-                  <JobCard
-                    key={job.job_id}
-                    job={job}
-                    queuePosition={index + 1}
-                    hasActiveJob={hasActiveJob}
-                    firstAssignedJob={firstAssignedJob}
-                    actionLoading={actionLoading}
-                    updateJob={updateJob}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-        </section>
+      {sidebarOpen && (
+        <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)}></div>
       )}
-    </main>
+
+      <div className="app-wrapper">
+        <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
+          <h2 className="sidebar-title">Operator Menu</h2>
+          
+          <div className="sidebar-group">
+            <div className="group-title">Operations</div>
+            <ul className="group-list">
+              <li className="group-item active" onClick={() => setSidebarOpen(false)}>
+                Active Queue
+              </li>
+            </ul>
+          </div>
+        </aside>
+
+        <main className="content-area">
+          <div className="content-header">
+            <nav className="breadcrumbs">JUICER OPERATOR &gt; Active Queue</nav>
+            <h1 className="content-title">Operator Dashboard</h1>
+            <p className="content-subtitle">
+              Strict first come, first serve queue. Only the top job can be
+              accepted.
+            </p>
+          </div>
+
+          {loading ? (
+            <div className="loading-state">Loading active queue...</div>
+          ) : (
+            <>
+              <section className="panel">
+                <div className="panel-head">
+                  <div>
+                    <h2>Active Queue</h2>
+                    <p>Strict FCFS queue management. Auto-refresh: 5s</p>
+                  </div>
+                </div>
+
+                <div className="column-body">
+                  {queueJobs.length === 0 ? (
+                    <p className="empty-column">No active queue jobs</p>
+                  ) : (
+                    queueJobs.map((job, index) => (
+                      <JobCard
+                        key={job.job_id}
+                        job={job}
+                        queuePosition={index + 1}
+                        hasActiveJob={hasActiveJob}
+                        firstAssignedJob={firstAssignedJob}
+                        actionLoading={actionLoading}
+                        updateJob={updateJob}
+                      />
+                    ))
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+        </main>
+      </div>
+    </div>
   );
 }
 

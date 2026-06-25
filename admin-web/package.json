@@ -9,7 +9,8 @@
     "vite": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "axios": "latest"
+    "axios": "latest",
+    "qrcode": "latest"
   },
   "devDependencies": {}
 }
