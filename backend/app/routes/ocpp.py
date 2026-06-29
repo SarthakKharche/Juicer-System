@@ -132,6 +132,29 @@ def extract_meter_wh(payload: dict) -> float | None:
     return None
 
 
+def resolve_stop_meter_wh(status: ChargeStatus, payload: dict) -> float:
+    current_wh = float(status.current_wh_delivered or 0)
+    meter_stop = payload.get("meterStop")
+
+    if meter_stop is None:
+        return current_wh
+
+    try:
+        meter_stop_wh = float(meter_stop)
+    except (TypeError, ValueError):
+        return current_wh
+
+    if current_wh <= 0:
+        return meter_stop_wh
+
+    # Some simulators send the configured target total as meterStop when stopped
+    # manually. Preserve the last real MeterValues reading in that case.
+    if meter_stop_wh > current_wh * 1.25 and meter_stop_wh - current_wh > 250:
+        return current_wh
+
+    return max(current_wh, meter_stop_wh)
+
+
 def send_completion_message(job: Queue, energy_kwh: float):
     send_whatsapp_text(
         job.phone_number,
@@ -269,12 +292,7 @@ async def handle_ocpp_call(charger_id: str, action: str, payload: dict) -> dict:
             completed_job = None
             if status:
                 status.is_charging_active = False
-                meter_stop = payload.get("meterStop")
-                if meter_stop is not None:
-                    status.current_wh_delivered = max(
-                        float(status.current_wh_delivered or 0),
-                        float(meter_stop),
-                    )
+                status.current_wh_delivered = resolve_stop_meter_wh(status, payload)
 
                 if status.job_id:
                     job = db.get(Queue, status.job_id)
