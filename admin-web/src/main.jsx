@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import QRCode from "qrcode";
 import { api } from "./api/client";
 import "./style.css";
 
 const ACTIVE_STEPS = ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"];
+const PAGE_SIZE = 25;
 
 function App() {
   const [jobs, setJobs] = useState([]);
@@ -49,6 +50,8 @@ function App() {
   const [jobBuildingFilter, setJobBuildingFilter] = useState("ALL");
   const [jobFromDate, setJobFromDate] = useState("");
   const [jobToDate, setJobToDate] = useState("");
+  const [jobPage, setJobPage] = useState(1);
+  const [sessionPage, setSessionPage] = useState(1);
 
   const existingBuildingIds = useMemo(
     () => new Set(buildings.map((building) => building.building_id)),
@@ -283,7 +286,11 @@ function App() {
       .sort((a, b) => new Date(b.created_at || b.updated_at) - new Date(a.created_at || a.updated_at));
   }, [jobs, jobSearch, jobStatusFilter, jobBuildingFilter, jobFromDate, jobToDate]);
 
-  const recentJobs = useMemo(() => filteredJobs.slice(0, 25), [filteredJobs]);
+  const jobPageCount = Math.max(1, Math.ceil(filteredJobs.length / PAGE_SIZE));
+  const paginatedJobs = useMemo(() => {
+    const start = (jobPage - 1) * PAGE_SIZE;
+    return filteredJobs.slice(start, start + PAGE_SIZE);
+  }, [filteredJobs, jobPage]);
 
   function clearJobFilters() {
     setJobSearch("");
@@ -362,6 +369,32 @@ function App() {
       })
       .sort((a, b) => new Date(b.created_at || b.updated_at) - new Date(a.created_at || a.updated_at));
   }, [jobs, appliedSessFilters]);
+
+  const sessionPageCount = Math.max(1, Math.ceil(filteredSessions.length / PAGE_SIZE));
+  const paginatedSessions = useMemo(() => {
+    const start = (sessionPage - 1) * PAGE_SIZE;
+    return filteredSessions.slice(start, start + PAGE_SIZE);
+  }, [filteredSessions, sessionPage]);
+
+  useEffect(() => {
+    setJobPage(1);
+  }, [jobSearch, jobStatusFilter, jobBuildingFilter, jobFromDate, jobToDate]);
+
+  useEffect(() => {
+    setSessionPage(1);
+  }, [appliedSessFilters]);
+
+  useEffect(() => {
+    if (jobPage > jobPageCount) {
+      setJobPage(jobPageCount);
+    }
+  }, [jobPage, jobPageCount]);
+
+  useEffect(() => {
+    if (sessionPage > sessionPageCount) {
+      setSessionPage(sessionPageCount);
+    }
+  }, [sessionPage, sessionPageCount]);
 
   async function handleCreateBuilding(event) {
     event.preventDefault();
@@ -829,8 +862,7 @@ function App() {
                     </div>
 
                     <div className="filter-summary">
-                      Showing <b>{recentJobs.length}</b> of <b>{filteredJobs.length}</b> matching jobs
-                      {filteredJobs.length > recentJobs.length ? " (latest 25 shown)" : ""}.
+                      Showing <b>{paginatedJobs.length}</b> of <b>{filteredJobs.length}</b> matching jobs.
                     </div>
 
                     <div className="jobs-table-card">
@@ -843,10 +875,10 @@ function App() {
                         <span>Created</span>
                       </div>
 
-                      {recentJobs.length === 0 ? (
+                      {paginatedJobs.length === 0 ? (
                         <div className="empty">No jobs match your search or filters.</div>
                       ) : (
-                        recentJobs.map((job) => (
+                        paginatedJobs.map((job) => (
                           <div className="table-row jobs-grid job-row" key={job.job_id}>
                             <div className="job-id-cell">
                               <strong>{job.job_id ? `#${job.job_id.slice(0, 8)}` : "—"}</strong>
@@ -878,6 +910,13 @@ function App() {
                         ))
                       )}
                     </div>
+                    <Pagination
+                      page={jobPage}
+                      pageCount={jobPageCount}
+                      total={filteredJobs.length}
+                      pageSize={PAGE_SIZE}
+                      onPageChange={setJobPage}
+                    />
                   </Panel>
                 </>
               )}
@@ -974,12 +1013,12 @@ function App() {
                           <span>Actions</span>
                         </div>
 
-                        {filteredSessions.length === 0 ? (
+                        {paginatedSessions.length === 0 ? (
                           <div className="empty" style={{ gridColumn: "span 10", textAlign: "center", padding: "32px" }}>
                             No sessions found.
                           </div>
                         ) : (
-                          filteredSessions.map((job) => {
+                          paginatedSessions.map((job) => {
                             const isJobActive = ACTIVE_STEPS.includes(job.current_step);
                             
                             const energy = Number(job.energy_kwh || 0);
@@ -1036,6 +1075,13 @@ function App() {
                         )}
                       </div>
                     </div>
+                    <Pagination
+                      page={sessionPage}
+                      pageCount={sessionPageCount}
+                      total={filteredSessions.length}
+                      pageSize={PAGE_SIZE}
+                      onPageChange={setSessionPage}
+                    />
                   </Panel>
                 </>
               )}
@@ -1333,6 +1379,58 @@ function Panel({ title, description, children }) {
       </div>
       {children}
     </section>
+  );
+}
+
+function Pagination({ page, pageCount, total, pageSize, onPageChange }) {
+  const pendingScrollRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (!pendingScrollRef.current) return;
+
+    const { x, y } = pendingScrollRef.current;
+    pendingScrollRef.current = null;
+    window.scrollTo({ top: y, left: x, behavior: "auto" });
+  }, [page]);
+
+  if (total <= pageSize) return null;
+
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(total, page * pageSize);
+
+  function changePage(nextPage, event) {
+    event.preventDefault();
+    event.currentTarget.blur();
+    pendingScrollRef.current = {
+      x: window.scrollX,
+      y: window.scrollY,
+    };
+    onPageChange(nextPage);
+  }
+
+  return (
+    <div className="pagination-bar">
+      <span>
+        Showing <b>{start}-{end}</b> of <b>{total}</b>
+      </span>
+      <div className="pagination-actions">
+        <button
+          className="secondary-btn"
+          disabled={page <= 1}
+          onClick={(event) => changePage(Math.max(1, page - 1), event)}
+        >
+          Previous
+        </button>
+        <span className="page-indicator">Page {page} of {pageCount}</span>
+        <button
+          className="secondary-btn"
+          disabled={page >= pageCount}
+          onClick={(event) => changePage(Math.min(pageCount, page + 1), event)}
+        >
+          Next
+        </button>
+      </div>
+    </div>
   );
 }
 
