@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import QRCode from "qrcode";
 import { api } from "./api/client";
@@ -16,6 +16,7 @@ function App() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard"); // "dashboard", "chargers", "juicers", "sessions", "jobs", "qr-management"
+  const isLoadingDataRef = useRef(false);
 
   // Sessions filter states
   const [sessBuildingFilter, setSessBuildingFilter] = useState("ALL");
@@ -60,6 +61,9 @@ function App() {
   );
 
   async function loadData() {
+    if (isLoadingDataRef.current) return;
+    isLoadingDataRef.current = true;
+
     try {
       setError("");
       const res = await api.get("/juicer/jobs/all");
@@ -68,6 +72,7 @@ function App() {
       console.error(err);
       setError("Could not load admin data from backend.");
     } finally {
+      isLoadingDataRef.current = false;
       setLoading(false);
     }
   }
@@ -107,8 +112,22 @@ function App() {
 
   useEffect(() => {
     refreshAll();
-    const interval = setInterval(loadData, activeTab === "sessions" ? 3000 : 10000);
-    return () => clearInterval(interval);
+    const fastRefreshTabs = ["dashboard", "chargers", "juicers", "sessions"];
+    const refreshMs = fastRefreshTabs.includes(activeTab) ? 2000 : 8000;
+    const interval = setInterval(loadData, refreshMs);
+
+    function refreshWhenVisible() {
+      if (!document.hidden) {
+        loadData();
+      }
+    }
+
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [activeTab]);
 
   useEffect(() => {
