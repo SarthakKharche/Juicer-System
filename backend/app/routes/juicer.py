@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -15,6 +16,13 @@ ACTIVE_STEPS = ["ASSIGNED", "ENROUTE", "CHARGING", "STOP_REQUESTED"]
 CHECK = "\u2705"
 LIGHTNING = "\u26a1"
 
+
+def get_job_building_id(job: Queue, db: Session) -> str | None:
+    if getattr(job, "parking_slot_id", None):
+        parking_slot = db.get(ParkingSlot, job.parking_slot_id)
+        if parking_slot:
+            return parking_slot.building_id
+    return job.building_id
 
 def get_job_energy_wh(job: Queue, db: Session) -> float:
     charge_status_rows = []
@@ -40,11 +48,13 @@ def serialize_job(job: Queue, db: Session | None = None):
     parking_slot = None
     energy_kwh = 0.0
 
-    if db and getattr(job, "building_id", None):
-        building = db.get(Building, job.building_id)
-
     if db and getattr(job, "parking_slot_id", None):
         parking_slot = db.get(ParkingSlot, job.parking_slot_id)
+
+    if db and parking_slot:
+        building = db.get(Building, parking_slot.building_id)
+    elif db and getattr(job, "building_id", None):
+        building = db.get(Building, job.building_id)
 
     if db:
         if job.current_step == "COMPLETED" and job.final_wh_delivered is not None:
@@ -55,7 +65,7 @@ def serialize_job(job: Queue, db: Session | None = None):
     return {
         "job_id": job.job_id,
         "slot_id": job.slot_id,
-        "building_id": job.building_id,
+        "building_id": parking_slot.building_id if parking_slot else job.building_id,
         "building_name": building.building_name if building else None,
         "building_type": building.building_type if building else None,
         "parking_slot_id": job.parking_slot_id,
@@ -70,18 +80,32 @@ def serialize_job(job: Queue, db: Session | None = None):
         "updated_at": job.updated_at.isoformat() if job.updated_at else None,
     }
 
+
 @router.get("/jobs")
-def get_jobs(db: Session = Depends(get_db)):
-    jobs = (
-        db.query(Queue)
-        .filter(Queue.current_step.in_(ACTIVE_STEPS))
-        .order_by(Queue.created_at.asc())
-        .limit(100)
-        .all()
-    )
+def get_jobs(
+    building_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Queue).filter(Queue.current_step.in_(ACTIVE_STEPS))
+
+    if building_id:
+        query = query.outerjoin(
+            ParkingSlot,
+            Queue.parking_slot_id == ParkingSlot.parking_slot_id,
+        )
+        query = query.filter(
+            or_(
+                ParkingSlot.building_id == building_id,
+                and_(
+                    Queue.parking_slot_id.is_(None),
+                    Queue.building_id == building_id,
+                ),
+            )
+        )
+
+    jobs = query.order_by(Queue.created_at.asc()).limit(100).all()
 
     return [serialize_job(job, db) for job in jobs]
-
 
 @router.get("/jobs/all")
 def get_all_jobs(db: Session = Depends(get_db)):
@@ -108,11 +132,24 @@ def accept_job(job_id: str, db: Session = Depends(get_db)):
             detail=f"Job cannot be accepted from status {job.current_step}",
         )
 
-    active_job = (
-        db.query(Queue)
-        .filter(Queue.current_step.in_(["ENROUTE", "CHARGING", "STOP_REQUESTED"]))
-        .first()
-    )
+    job_building_id = get_job_building_id(job, db)
+    active_job_query = db.query(Queue).outerjoin(
+        ParkingSlot,
+        Queue.parking_slot_id == ParkingSlot.parking_slot_id,
+    ).filter(Queue.current_step.in_(["ENROUTE", "CHARGING", "STOP_REQUESTED"]))
+
+    if job_building_id:
+        active_job_query = active_job_query.filter(
+            or_(
+                ParkingSlot.building_id == job_building_id,
+                and_(
+                    Queue.parking_slot_id.is_(None),
+                    Queue.building_id == job_building_id,
+                ),
+            )
+        )
+
+    active_job = active_job_query.first()
 
     if active_job:
         raise HTTPException(
@@ -120,12 +157,23 @@ def accept_job(job_id: str, db: Session = Depends(get_db)):
             detail="Another job is already active. Complete it before accepting a new job.",
         )
 
-    first_assigned_job = (
-        db.query(Queue)
-        .filter(Queue.current_step == "ASSIGNED")
-        .order_by(Queue.created_at.asc())
-        .first()
-    )
+    first_assigned_query = db.query(Queue).outerjoin(
+        ParkingSlot,
+        Queue.parking_slot_id == ParkingSlot.parking_slot_id,
+    ).filter(Queue.current_step == "ASSIGNED")
+
+    if job_building_id:
+        first_assigned_query = first_assigned_query.filter(
+            or_(
+                ParkingSlot.building_id == job_building_id,
+                and_(
+                    Queue.parking_slot_id.is_(None),
+                    Queue.building_id == job_building_id,
+                ),
+            )
+        )
+
+    first_assigned_job = first_assigned_query.order_by(Queue.created_at.asc()).first()
 
     if first_assigned_job and first_assigned_job.job_id != job.job_id:
         raise HTTPException(
@@ -240,3 +288,4 @@ def complete_job(job_id: str, db: Session = Depends(get_db)):
         "current_step": job.current_step,
         "energy_kwh": energy_kwh,
     }
+

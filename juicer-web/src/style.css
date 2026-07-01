@@ -88,6 +88,44 @@ button {
   gap: 16px;
 }
 
+.operator-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: #ffffff;
+}
+
+.operator-chip img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #334155;
+}
+
+.operator-chip div {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.operator-chip strong {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.operator-chip span {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
 .refresh-btn {
   background: #1e293b;
   border: 1px solid #334155;
@@ -102,6 +140,343 @@ button {
 .refresh-btn:hover {
   background: #334155;
   color: #ffffff;
+}
+
+.alert-toggle {
+  border-color: #475569;
+}
+
+.alert-toggle.enabled {
+  background: #16a34a;
+  border-color: #22c55e;
+  color: #ffffff;
+}
+
+.alert-toggle.enabled:hover {
+  background: #15803d;
+}
+
+.login-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background:
+    linear-gradient(90deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.62)),
+    url("https://images.unsplash.com/photo-1593941707882-a5bba14938c7?auto=format&fit=crop&w=1800&q=80");
+  background-size: cover;
+  background-position: center;
+}
+
+.login-layout {
+  width: min(980px, 100%);
+  min-height: 560px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) 420px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 28px 90px rgba(15, 23, 42, 0.42);
+}
+
+.login-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px;
+  color: #ffffff;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.92)),
+    url("https://images.unsplash.com/photo-1593941707882-a5bba14938c7?auto=format&fit=crop&w=1200&q=80");
+  background-size: cover;
+  background-position: center;
+}
+
+.login-mark {
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f59e0b;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  box-shadow: 0 18px 35px rgba(245, 158, 11, 0.28);
+}
+
+.login-eyebrow {
+  margin-top: 70px;
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.login-hero h1 {
+  max-width: 430px;
+  margin-top: 10px;
+  font-size: clamp(34px, 5vw, 52px);
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+}
+
+.login-hero p {
+  max-width: 470px;
+  margin-top: 18px;
+  color: #dbeafe;
+  font-size: 15px;
+}
+
+.login-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.login-status-grid div {
+  min-width: 0;
+  padding: 14px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.58);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.login-status-grid span {
+  display: block;
+  color: #93c5fd;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.login-status-grid strong {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.login-panel {
+  background: #ffffff;
+  padding: 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+}
+
+.login-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-step {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-light);
+  color: var(--accent-color);
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.login-panel-head h2 {
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.login-panel-head p {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.login-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.login-panel select,
+.building-search-input {
+  width: 100%;
+  height: 46px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 12px;
+  background: #ffffff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.login-panel select:focus,
+.building-search-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.building-combobox {
+  position: relative;
+}
+
+.building-combobox-control {
+  display: grid;
+  grid-template-columns: 1fr 42px;
+}
+
+.building-combobox-control .building-search-input {
+  border-radius: 6px 0 0 6px;
+  border-right: 0;
+}
+
+.building-combobox-toggle {
+  height: 46px;
+  border: 1px solid #cbd5e1;
+  border-radius: 0 6px 6px 0;
+  background: #f8fafc;
+  color: var(--text-secondary);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.building-combobox-toggle:hover:not(:disabled) {
+  background: #eff6ff;
+  color: var(--accent-color);
+}
+
+.building-combobox-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.building-search-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 178px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.14);
+}
+
+.building-option {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 11px 12px;
+  border: 0;
+  border-bottom: 1px solid #f1f5f9;
+  background: #ffffff;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+
+.building-option:last-child {
+  border-bottom: 0;
+}
+
+.building-option:hover,
+.building-option.selected {
+  background: #eff6ff;
+}
+
+.building-option.selected {
+  box-shadow: inset 3px 0 0 var(--accent-color);
+}
+
+.building-option strong {
+  font-size: 13px;
+}
+
+.building-option span,
+.building-search-empty {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.building-search-empty {
+  padding: 14px 12px;
+}
+
+.selected-building-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.selected-building-card span {
+  color: #1d4ed8;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.selected-building-card strong {
+  font-size: 15px;
+}
+
+.selected-building-card small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.login-divider {
+  height: 1px;
+  margin: 6px 0;
+  background: #e2e8f0;
+}
+
+.google-login-slot {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+}
+
+.login-warning,
+.login-error {
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.login-warning {
+  background: #fef7e0;
+  color: #92400e;
+}
+
+.login-error {
+  background: #fdf2f2;
+  color: #991b1b;
 }
 
 .app-wrapper {
@@ -555,6 +930,33 @@ button {
 
 /* Responsiveness */
 @media (max-width: 768px) {
+  .login-shell {
+    padding: 16px;
+    align-items: stretch;
+  }
+
+  .login-layout {
+    min-height: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .login-hero {
+    min-height: 300px;
+    padding: 28px;
+  }
+
+  .login-eyebrow {
+    margin-top: 34px;
+  }
+
+  .login-status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .login-panel {
+    padding: 24px;
+  }
+
   .app-wrapper {
     flex-direction: column;
     position: relative;
@@ -643,12 +1045,30 @@ button {
     font-size: 14px;
   }
 
-  .job-info p:nth-child(3) {
+  .job-info p:nth-child(4) {
     grid-column: span 2;
   }
 }
 
 @media (max-width: 480px) {
+  .login-shell {
+    padding: 0;
+  }
+
+  .login-layout {
+    min-height: 100vh;
+    border-radius: 0;
+  }
+
+  .login-hero {
+    min-height: 260px;
+    padding: 22px;
+  }
+
+  .login-panel {
+    padding: 22px;
+  }
+
   .topbar {
     padding: 0 16px;
   }
@@ -676,7 +1096,7 @@ button {
     gap: 6px;
   }
 
-  .job-info p:nth-child(3) {
+  .job-info p:nth-child(4) {
     grid-column: span 1;
   }
 }
