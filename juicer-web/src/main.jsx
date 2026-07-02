@@ -24,11 +24,15 @@ function App() {
   const [success, setSuccess] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(true);
+  const [notificationPermission, setNotificationPermission] = useState(() =>
+    "Notification" in window ? Notification.permission : "unsupported"
+  );
   const googleButtonRef = useRef(null);
   const knownJobsRef = useRef(new Map());
   const hasLoadedJobsRef = useRef(false);
   const alertAudioRef = useRef(null);
   const alertsEnabledRef = useRef(true);
+  const lastNotificationAtRef = useRef(0);
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   async function loadBuildings() {
@@ -93,11 +97,37 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/operator-alert-sw.js").catch((err) => {
+        console.warn("Could not register notification service worker", err);
+      });
+    }
+  }, []);
+
+  useEffect(() => {
     if (!operator) return;
 
     loadJobs();
     const interval = setInterval(loadJobs, 5000);
     return () => clearInterval(interval);
+  }, [operator]);
+
+  useEffect(() => {
+    if (!operator) return;
+
+    function refreshWhenVisible() {
+      if (document.visibilityState === "visible") {
+        loadJobs();
+      }
+    }
+
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("focus", refreshWhenVisible);
+
+    return () => {
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("focus", refreshWhenVisible);
+    };
   }, [operator]);
 
   useEffect(() => {
@@ -215,11 +245,28 @@ function App() {
     setLoading(false);
   }
 
-  function enableAlerts() {
+  async function enableAlerts() {
     setAlertsEnabled(true);
+    await requestNotificationPermission();
     playAlertSound();
     vibrate([60]);
     setSuccess("Operator alerts enabled.");
+  }
+
+  async function requestNotificationPermission() {
+    if (!("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      return "unsupported";
+    }
+
+    if (Notification.permission !== "default") {
+      setNotificationPermission(Notification.permission);
+      return Notification.permission;
+    }
+
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    return permission;
   }
 
   function notifyForJobChanges(nextJobs) {
@@ -239,24 +286,58 @@ function App() {
     });
 
     if (newJobs.length > 0) {
-      sendOperatorAlert("new-job");
+      sendOperatorAlert("new-job", newJobs[0]);
       setSuccess(`New charging request received for slot ${newJobs[0].slot_id}.`);
     }
 
     if (stopRequests.length > 0) {
-      sendOperatorAlert("stop-request");
+      sendOperatorAlert("stop-request", stopRequests[0]);
       setSuccess(`Stop request received for slot ${stopRequests[0].slot_id}.`);
     }
 
     knownJobsRef.current = nextMap;
   }
 
-  function sendOperatorAlert(type) {
+  function sendOperatorAlert(type, job) {
     if (alertsEnabledRef.current) {
       playAlertSound();
     }
 
     vibrate(type === "stop-request" ? [180, 80, 180] : [140, 70, 140]);
+    showSystemNotification(type, job);
+  }
+
+  async function showSystemNotification(type, job) {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+    const now = Date.now();
+    if (now - lastNotificationAtRef.current < 1200) return;
+    lastNotificationAtRef.current = now;
+
+    const isStopRequest = type === "stop-request";
+    const title = isStopRequest ? "Stop request received" : "New charging request";
+    const body = `${job.building_name || operator?.building_name || "Building"} - Slot ${job.slot_id}${
+      job.vehicle_number ? ` - ${job.vehicle_number}` : ""
+    }`;
+    const options = {
+      body,
+      tag: `${type}-${job.job_id}`,
+      renotify: true,
+      vibrate: isStopRequest ? [180, 80, 180] : [140, 70, 140],
+      data: { url: window.location.href },
+    };
+
+    try {
+      const registration = await navigator.serviceWorker?.ready;
+      if (registration?.showNotification) {
+        registration.showNotification(title, options);
+        return;
+      }
+    } catch (err) {
+      console.warn("Service worker notification failed", err);
+    }
+
+    new Notification(title, options);
   }
 
   function playAlertSound() {
@@ -332,8 +413,13 @@ function App() {
           <button
             className={`refresh-btn alert-toggle ${alertsEnabled ? "enabled" : ""}`}
             onClick={enableAlerts}
+            title={
+              notificationPermission === "granted"
+                ? "Sound and browser notifications are enabled"
+                : "Tap to allow sound and browser notifications"
+            }
           >
-            {alertsEnabled ? "Test Alert" : "Enable Alerts"}
+            {notificationPermission === "granted" ? "Test Alert" : "Allow Alerts"}
           </button>
           <button className="refresh-btn" onClick={loadJobs}>
             Refresh
